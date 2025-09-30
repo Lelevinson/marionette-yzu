@@ -26,9 +26,37 @@ export function parseToolCall(content: string): ToolCall | null {
     const match = content.match(/<function_call>(.*?)<\/function_call>/s)
     if (match) {
       try {
-        return JSON.parse(match[1])
+        let jsonStr = match[1].trim()
+        
+        console.log('Original tool call JSON:', jsonStr)
+        
+        // Fix common AI mistakes
+        // Replace {...} placeholder with {} (handles various spacing)
+        jsonStr = jsonStr.replace(/"arguments"\s*:\s*\{\s*\.\.\.?\s*\}/g, '"arguments": {}')
+        
+        // Also handle case without quotes around ...
+        jsonStr = jsonStr.replace(/"arguments"\s*:\s*\{\.\.\.?\}/g, '"arguments": {}')
+        
+        // If arguments is missing entirely, add empty object
+        if (!jsonStr.includes('"arguments"')) {
+          jsonStr = jsonStr.replace(/("function"\s*:\s*"[^"]+")/, '$1, "arguments": {}')
+        }
+        
+        console.log('Fixed tool call JSON:', jsonStr)
+        
+        // Parse and validate
+        const parsed = JSON.parse(jsonStr)
+        
+        // Ensure arguments exists
+        if (!parsed.arguments) {
+          parsed.arguments = {}
+        }
+        
+        console.log('Parsed tool call:', parsed)
+        
+        return parsed
       } catch (e) {
-        console.error('Failed to parse tool call JSON:', e)
+        console.error('Failed to parse tool call JSON:', match[1], e)
         return null
       }
     }

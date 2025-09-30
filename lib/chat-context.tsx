@@ -1,14 +1,20 @@
 import React, { createContext, useContext, useReducer, type ReactNode } from 'react'
 import { type Message, createUserMessage, createAssistantMessage } from './messages'
-import { streamResponse, getTokenUsage, destroySession as destroyAISession, interrupt as interruptAI } from './ai'
+import { streamResponse, getTokenUsage, destroySession as destroyAISession, interrupt as interruptAI, getSystemPrompt } from './ai'
 import { parseToolCall, executeTool, detectInvalidToolFormat } from './tools'
 import { shouldSummarize, summarizeConversation, formatSummaryMessage } from './summarizer'
+import { executeUITool, validateUITools } from './ui-tools'
+import { getToolSpec } from './tool-registry'
+
+// Validate UI tools on module load
+validateUITools()
 
 interface ChatState {
   messages: Message[]
   isProcessing: boolean
   isWaitingForFirstChunk: boolean
   isSummarizing: boolean
+  executingTool: string | null
 }
 
 type ChatAction =
@@ -18,6 +24,7 @@ type ChatAction =
   | { type: 'SET_PROCESSING'; payload: boolean }
   | { type: 'SET_WAITING'; payload: boolean }
   | { type: 'SET_SUMMARIZING'; payload: boolean }
+  | { type: 'SET_EXECUTING_TOOL'; payload: string | null }
   | { type: 'RESET' }
 
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
@@ -54,8 +61,11 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     case 'SET_SUMMARIZING':
       return { ...state, isSummarizing: action.payload }
     
+    case 'SET_EXECUTING_TOOL':
+      return { ...state, executingTool: action.payload }
+    
     case 'RESET':
-      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false }
+      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false, executingTool: null }
     
     default:
       return state
@@ -68,6 +78,7 @@ interface ChatContextValue {
   sendMessage: (userInput: string) => Promise<void>
   resetChat: () => void
   interruptChat: () => void
+  copyContext: () => Promise<string>
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -77,8 +88,33 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     messages: [],
     isProcessing: false,
     isWaitingForFirstChunk: false,
-    isSummarizing: false
+    isSummarizing: false,
+    executingTool: null
   })
+
+  // Track if we need to rebuild AI context from restored messages
+  const [needsContextRebuild, setNeedsContextRebuild] = React.useState(false)
+
+  // Restore messages on mount
+  React.useEffect(() => {
+    chrome.storage.local.get(['chat_messages'], (result) => {
+      if (result.chat_messages && Array.isArray(result.chat_messages) && result.chat_messages.length > 0) {
+        console.log('Restored', result.chat_messages.length, 'messages from storage')
+        result.chat_messages.forEach((msg: Message) => {
+          dispatch({ type: 'ADD_MESSAGE', payload: msg })
+        })
+        // Mark that we need to rebuild context on next user message
+        setNeedsContextRebuild(true)
+      }
+    })
+  }, [])
+
+  // Save messages to storage whenever they change
+  React.useEffect(() => {
+    if (state.messages.length > 0) {
+      chrome.storage.local.set({ chat_messages: state.messages })
+    }
+  }, [state.messages])
 
   const checkAndSummarize = async () => {
     const tokenUsage = getTokenUsage()
@@ -111,10 +147,49 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const sendMessage = async (userInput: string) => {
+    // CRITICAL: Check user activation immediately while we have it
+    const hasUserActivation = (navigator as any).userActivation?.isActive
+    console.log('sendMessage called - User activation at start:', hasUserActivation)
+    
     dispatch({ type: 'SET_PROCESSING', payload: true })
     dispatch({ type: 'SET_WAITING', payload: true })
     
-    // Add user message
+    // If we restored messages and haven't rebuilt context yet, prepend conversation history BEFORE adding new message
+    let messageToSend = userInput
+    if (needsContextRebuild && state.messages.length > 0) {
+      console.log('Rebuilding AI context from', state.messages.length, 'previous messages')
+      const history = state.messages.map(msg => {
+        let content = msg.content
+        
+        // Truncate base64 images
+        if (content.includes('data:image/')) {
+          content = content.replace(
+            /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+            (match) => {
+              const preview = match.substring(0, 50)
+              return `${preview}... [IMAGE_TRUNCATED_${match.length}_CHARS]`
+            }
+          )
+        }
+        
+        // Truncate base64 audio
+        if (content.includes('data:audio/')) {
+          content = content.replace(
+            /data:audio\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+            (match) => {
+              const preview = match.substring(0, 50)
+              return `${preview}... [AUDIO_TRUNCATED_${match.length}_CHARS]`
+            }
+          )
+        }
+        
+        return `${msg.role.toUpperCase()}: ${content}`
+      }).join('\n\n')
+      messageToSend = `[Previous conversation history]\n\n${history}\n\n[Current message]\nUSER: ${userInput}`
+      setNeedsContextRebuild(false)
+    }
+    
+    // Add user message AFTER building history
     const userMessage = createUserMessage(userInput)
     dispatch({ type: 'ADD_MESSAGE', payload: userMessage })
     
@@ -123,7 +198,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     let assistantMessageId = Date.now() + '_assistant'
     
     try {
-      const contextCount = await streamResponse(userInput, (chunk: string) => {
+      const contextCount = await streamResponse(messageToSend, (chunk: string) => {
         assistantContent += chunk
         
         if (assistantContent.length === chunk.length) {
@@ -167,8 +242,32 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         }
         
         console.log(`Loop ${loopCount + 1} - Tool call:`, toolCall)
-        const toolResult = await executeTool(toolCall)
+        
+        // Show which tool is executing
+        dispatch({ type: 'SET_EXECUTING_TOOL', payload: toolCall.function })
+        
+        // Check if tool requires user gesture
+        const toolSpec = getToolSpec(toolCall.function)
+        let toolResult: any
+        
+        if (toolSpec?.requiresUserGesture) {
+          console.log('Executing UI tool (user gesture required):', toolCall.function)
+          console.log('User activation before UI tool:', (navigator as any).userActivation?.isActive)
+          toolResult = await executeUITool(toolCall)
+        } else {
+          console.log('Executing background tool:', toolCall.function)
+          toolResult = await executeTool(toolCall)
+        }
+        
         console.log('Tool result:', toolResult)
+        
+        // Clear executing tool indicator
+        dispatch({ type: 'SET_EXECUTING_TOOL', payload: null })
+        
+        // If tool failed, add context to help AI not retry
+        if (!toolResult?.success) {
+          console.log('Tool failed, AI should not retry this exact call')
+        }
         
         // Add tool result as message
         const resultToPass = toolResult?.success ? toolResult.result : `Error: ${toolResult?.error || 'Tool failed'}`
@@ -179,7 +278,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         let followupContent = ""
         const followupMessageId = Date.now() + '_followup_' + loopCount
         
-        const followupContextCount = await streamResponse(userInput, (chunk: string) => {
+        const followupContextCount = await streamResponse(messageToSend, (chunk: string) => {
           followupContent += chunk
           
           if (followupContent.length === chunk.length) {
@@ -225,6 +324,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     interruptAI()
     destroyAISession()
     dispatch({ type: 'RESET' })
+    // Clear storage
+    chrome.storage.local.remove(['chat_messages'])
   }
 
   const interruptChat = () => {
@@ -233,8 +334,52 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_WAITING', payload: false })
   }
 
+  const copyContext = async (): Promise<string> => {
+    const systemPrompt = getSystemPrompt()
+    
+    let contextText = ''
+    
+    // Include system prompt if available
+    if (systemPrompt) {
+      contextText += '=== SYSTEM PROMPT ===\n\n'
+      contextText += systemPrompt
+      contextText += '\n\n=== CONVERSATION ===\n\n'
+    }
+    
+    // Add messages with truncated media
+    contextText += state.messages.map(msg => {
+      let content = msg.content
+      
+      // Truncate base64 images
+      if (content.includes('data:image/')) {
+        content = content.replace(
+          /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+          (match) => {
+            const preview = match.substring(0, 50)
+            return `${preview}... [IMAGE_TRUNCATED_${match.length}_CHARS]`
+          }
+        )
+      }
+      
+      // Truncate base64 audio
+      if (content.includes('data:audio/')) {
+        content = content.replace(
+          /data:audio\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+          (match) => {
+            const preview = match.substring(0, 50)
+            return `${preview}... [AUDIO_TRUNCATED_${match.length}_CHARS]`
+          }
+        )
+      }
+      
+      return `${msg.role.toUpperCase()}: ${content}`
+    }).join('\n\n')
+    
+    return contextText
+  }
+
   return (
-    <ChatContext.Provider value={{ state, dispatch, sendMessage, resetChat, interruptChat }}>
+    <ChatContext.Provider value={{ state, dispatch, sendMessage, resetChat, interruptChat, copyContext }}>
       {children}
     </ChatContext.Provider>
   )

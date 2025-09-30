@@ -1,7 +1,11 @@
 import type { ToolSpec } from '../../lib/tool-registry'
 
-async function getAccessibilitySnapshot(params: any) {
+async function findElements(params: { query: string }) {
   try {
+    if (!params.query) {
+      return { success: false, error: 'Query string is required' }
+    }
+
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tab?.id) {
       return { success: false, error: 'No active tab found' }
@@ -9,10 +13,10 @@ async function getAccessibilitySnapshot(params: any) {
 
     const result = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => {
-        // Extract interactive elements with accessibility info
+      func: (searchQuery: string) => {
+        const query = searchQuery.toLowerCase()
         const elements: any[] = []
-        let index = 0
+        let globalIndex = 0
         
         const interactiveSelectors = [
           'button',
@@ -47,7 +51,6 @@ async function getAccessibilitySnapshot(params: any) {
             const labelEl = labelId ? document.getElementById(labelId) : null
             accessibleName = labelEl?.textContent?.trim() || ''
           } else if (htmlEl instanceof HTMLInputElement || htmlEl instanceof HTMLTextAreaElement) {
-            // For inputs, look for associated label
             const label = htmlEl.labels?.[0]
             accessibleName = label?.textContent?.trim() || htmlEl.placeholder || ''
           } else {
@@ -68,8 +71,16 @@ async function getAccessibilitySnapshot(params: any) {
             else if (tagName === 'select') role = 'combobox'
           }
           
-          // Create unique selector
-          const dataAttr = `data-marionette-${index}`
+          // Filter by query - check role, name, tag, type
+          const searchableText = `${role} ${accessibleName} ${htmlEl.tagName}`.toLowerCase()
+          
+          if (!searchableText.includes(query)) {
+            globalIndex++
+            return
+          }
+          
+          // Tag element
+          const dataAttr = `data-marionette-${globalIndex}`
           htmlEl.setAttribute(dataAttr, 'true')
           
           // Truncate long text
@@ -78,7 +89,7 @@ async function getAccessibilitySnapshot(params: any) {
             : accessibleName
           
           elements.push({
-            index,
+            index: globalIndex,
             role,
             name: displayName,
             tagName: htmlEl.tagName.toLowerCase(),
@@ -88,11 +99,12 @@ async function getAccessibilitySnapshot(params: any) {
             disabled: htmlEl.hasAttribute('disabled')
           })
           
-          index++
+          globalIndex++
         })
         
         return elements
-      }
+      },
+      args: [params.query]
     })
 
     const elements = result[0]?.result || []
@@ -100,23 +112,12 @@ async function getAccessibilitySnapshot(params: any) {
     if (elements.length === 0) {
       return {
         success: true,
-        result: 'No interactive elements found on this page.'
-      }
-    }
-    
-    // Check if page is too complex
-    const MAX_ELEMENTS_TO_SHOW = 100
-    if (elements.length > MAX_ELEMENTS_TO_SHOW) {
-      return {
-        success: true,
-        result: `TOO MANY ELEMENTS: Found ${elements.length} interactive elements.
-This page is too complex for getAccessibilitySnapshot.
-Use findElements with a specific query instead (e.g., "search", "submit", "login").`
+        result: `No elements found matching "${params.query}".`
       }
     }
     
     // Format as readable text
-    let output = `Found ${elements.length} interactive elements:\n\n`
+    let output = `Found ${elements.length} elements matching "${params.query}":\n\n`
     
     elements.forEach((el: any) => {
       const disabled = el.disabled ? ' [DISABLED]' : ''
@@ -136,14 +137,21 @@ Use findElements with a specific query instead (e.g., "search", "submit", "login
 }
 
 export const spec: ToolSpec = {
-  name: 'getAccessibilitySnapshot',
-  description: 'Gets a list of all interactive elements on the current page with their accessibility information',
-  parameters: [],
+  name: 'findElements',
+  description: 'Searches for specific interactive elements on the page by role, name, or text content. More efficient than getAccessibilitySnapshot on complex pages.',
+  parameters: [
+    {
+      name: 'query',
+      type: 'string',
+      description: 'Search query to filter elements (e.g., "search", "submit button", "email input", "login")',
+      required: true
+    }
+  ],
   examples: [
-    'User: "what can I click on this page?" → getAccessibilitySnapshot',
-    'User: "show me the buttons" → getAccessibilitySnapshot',
-    'User: "list all links" → getAccessibilitySnapshot'
+    'User: "click the submit button" → findElements with query: "submit"',
+    'User: "find the search box" → findElements with query: "search"',
+    'When getAccessibilitySnapshot returns too many elements → use findElements to narrow down'
   ]
 }
 
-export default getAccessibilitySnapshot
+export default findElements

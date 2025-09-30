@@ -56,18 +56,18 @@
       "https://*/*",
       "<all_urls>"
     ],
-    "side_panel": {
-      "default_path": "sidepanel.html"
+    "action": {
+      "default_popup": "popup.html"
     },
     "permissions": [
+      "tabs",
       "activeTab",
       "tabCapture",
       "scripting",
       "storage",
       "unlimitedStorage",
       "alarms",
-      "audioCapture",
-      "sidePanel"
+      "audioCapture"
     ],
     "externally_connectable": {},
     "content_security_policy": {

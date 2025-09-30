@@ -20,7 +20,7 @@ export function createAssistantMessage(content: string, contextCount?: number): 
   return {
     id: Date.now() + '_assistant',
     role: 'assistant',
-    content,
+    content: content.trim(),
     timestamp: Date.now(),
     contextCount
   }

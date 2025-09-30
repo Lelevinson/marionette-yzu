@@ -5,6 +5,8 @@ import { spec as openTabSpec } from '../background/messages/openTab'
 import { spec as getAccessibilitySnapshotSpec } from '../background/messages/getAccessibilitySnapshot'
 import { spec as clickElementSpec } from '../background/messages/clickElement'
 import { spec as fillInputSpec } from '../background/messages/fillInput'
+import { spec as findElementsSpec } from '../background/messages/findElements'
+import { spec as listenSpec } from '../background/messages/listen'
 
 export interface ToolParameter {
   name: string
@@ -18,6 +20,7 @@ export interface ToolSpec {
   description: string
   parameters: ToolParameter[]
   examples: string[]
+  requiresUserGesture?: boolean  // If true, must be called from UI context
 }
 
 // Automatically aggregated from tool modules
@@ -26,8 +29,10 @@ export const TOOL_REGISTRY: ToolSpec[] = [
   getPageTitleSpec,
   openTabSpec,
   getAccessibilitySnapshotSpec,
+  findElementsSpec,
   clickElementSpec,
-  fillInputSpec
+  fillInputSpec,
+  listenSpec
 ]
 
 // Generate formatted tool documentation for the system prompt
@@ -74,4 +79,15 @@ export function isValidTool(toolName: string): boolean {
 // Get tool spec by name
 export function getToolSpec(toolName: string): ToolSpec | undefined {
   return TOOL_REGISTRY.find(tool => tool.name === toolName)
+}
+
+// Check if tool requires user gesture
+export function requiresUserGesture(toolName: string): boolean {
+  const spec = getToolSpec(toolName)
+  return spec?.requiresUserGesture || false
+}
+
+// Get all tools that require user gesture
+export function getUITools(): ToolSpec[] {
+  return TOOL_REGISTRY.filter(tool => tool.requiresUserGesture)
 }

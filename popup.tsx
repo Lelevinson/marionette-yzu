@@ -1,13 +1,12 @@
 import React, { useState, useRef, useEffect } from "react"
 import { Copy, RotateCcw, Square } from "lucide-react"
-import { getSystemPrompt } from "./lib/ai"
 import { parseToolCall } from "./lib/tools"
 import { type Message } from "./lib/messages"
 import { ChatProvider, useChatContext } from "./lib/chat-context"
 import "./style.css"
 
 const ChatInterface = () => {
-  const { state, sendMessage, resetChat, interruptChat } = useChatContext()
+  const { state, sendMessage, resetChat, interruptChat, copyContext } = useChatContext()
   const [input, setInput] = useState("")
   const [copyFeedback, setCopyFeedback] = useState("")
   
@@ -40,22 +39,9 @@ const ChatInterface = () => {
 
   const handleCopyContext = async () => {
     try {
-      const systemPrompt = getSystemPrompt()
-      
-      let contextText = ''
-      
-      // Include system prompt if available
-      if (systemPrompt) {
-        contextText += '=== SYSTEM PROMPT ===\n\n'
-        contextText += systemPrompt
-        contextText += '\n\n=== CONVERSATION ===\n\n'
-      }
-      
-      // Add messages
-      contextText += state.messages.map(msg => `${msg.role.toUpperCase()}: ${msg.content}`).join('\n\n')
-      
+      const contextText = await copyContext()
       await navigator.clipboard.writeText(contextText)
-      setCopyFeedback("Context copied (with system prompt)")
+      setCopyFeedback("Context copied")
       setTimeout(() => setCopyFeedback(""), 2000)
     } catch (error) {
       setCopyFeedback("Copy failed")
@@ -104,6 +90,35 @@ const ChatInterface = () => {
     
     if (isToolResult) {
       const resultContent = message.content.replace('[TOOL RESULT]\n', '')
+      
+      // Check if it's a screenshot
+      const isScreenshot = resultContent.startsWith('data:image/')
+      
+      // Check if it's audio
+      const isAudio = resultContent.startsWith('data:audio/')
+      
+      if (isScreenshot) {
+        return (
+          <div key={message.id} className="mb-2 font-mono text-xs">
+            <div className="text-blue-400 mb-1">TOOL RESULT</div>
+            <div className="bg-blue-950 p-2 rounded border border-blue-800">
+              <img src={resultContent} alt="Screenshot" className="w-full rounded" />
+            </div>
+          </div>
+        )
+      }
+      
+      if (isAudio) {
+        return (
+          <div key={message.id} className="mb-2 font-mono text-xs">
+            <div className="text-blue-400 mb-1">TOOL RESULT</div>
+            <div className="bg-blue-950 p-2 rounded border border-blue-800">
+              <audio src={resultContent} controls className="w-full" />
+            </div>
+          </div>
+        )
+      }
+      
       return (
         <div key={message.id} className="mb-2 font-mono text-xs">
           <div className="text-blue-400 mb-1">TOOL RESULT</div>
@@ -128,7 +143,7 @@ const ChatInterface = () => {
   }
 
   return (
-    <div className="w-[420px] h-screen bg-black text-white flex flex-col">
+    <div className="w-full  bg-black text-white flex flex-col" style={{minHeight: '500px', maxHeight: '600px'}}>
       {/* Header */}
       <div className="p-3 border-b border-gray-800 flex justify-between items-center">
         <div className="font-mono text-sm">DEBUG_CHAT</div>
@@ -179,6 +194,16 @@ const ChatInterface = () => {
           <div className="mb-4 font-mono text-xs">
             <div className="text-yellow-400 mb-1">SUMMARIZING</div>
             <div className="text-gray-400">Condensing conversation to save context...</div>
+          </div>
+        )}
+        
+        {/* Tool execution indicator */}
+        {state.executingTool && (
+          <div className="mb-4 font-mono text-xs">
+            <div className="text-cyan-400 mb-1 flex items-center gap-2">
+              <span className="animate-pulse">●</span>
+              EXECUTING: {state.executingTool}
+            </div>
           </div>
         )}
         

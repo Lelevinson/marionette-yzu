@@ -58,7 +58,7 @@ async function ensureSession() {
 
     aiSession = await (window as any).LanguageModel.create({
       initialPrompts: [{ role: 'system', content: prompt }],
-      expectedInputs: [{ type: 'text' }, { type: 'image' }]
+      expectedInputs: [{ type: 'text' }, { type: 'image' }, { type: 'audio' }]
     })
   }
 }
@@ -76,12 +76,26 @@ export async function streamResponse(message: string, onChunk: (chunk: string) =
       // Convert data URL to blob for multimodal input
       const response = await fetch(toolResult)
       const blob = await response.blob()
-      
+
       promptInput = [{
         role: 'user',
         content: [
           { type: 'text', value: `${message}\n\nHere's the screenshot:` },
           { type: 'image', value: blob }
+        ]
+      }]
+    }
+    // Check if tool result is audio (data URL)
+    else if (typeof toolResult === 'string' && toolResult.startsWith('data:audio/')) {
+      // Convert data URL to blob for multimodal input
+      const response = await fetch(toolResult)
+      const blob = await response.blob()
+
+      promptInput = [{
+        role: 'user',
+        content: [
+          { type: 'text', value: `${message}\n\nHere's the audio recording:` },
+          { type: 'audio', value: blob }
         ]
       }]
     } else {

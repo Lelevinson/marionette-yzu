@@ -2,8 +2,10 @@ import getPageTitle from './background/messages/getPageTitle'
 import openTab from './background/messages/openTab'
 import captureScreenshot from './background/messages/captureScreenshot'
 import getAccessibilitySnapshot from './background/messages/getAccessibilitySnapshot'
+import findElements from './background/messages/findElements'
 import clickElement from './background/messages/clickElement'
 import fillInput from './background/messages/fillInput'
+import listenHandler from './background/messages/listen'
 import { isValidTool } from './lib/tool-registry'
 
 // Background script for Marionette extension
@@ -11,31 +13,40 @@ import { isValidTool } from './lib/tool-registry'
 // Tool handler registry - maps tool names to their implementations
 type ToolHandler = (params: any) => Promise<any>
 
+// Wrapper for Plasmo message handlers
+const plasmoWrapper = (handler: any): ToolHandler => {
+  return async (params: any) => {
+    return new Promise((resolve) => {
+      handler({ name: '', body: params }, { 
+        send: (response: any) => {
+          // Convert Plasmo response format to our format
+          if (response.error) {
+            resolve({ success: false, error: response.error })
+          } else {
+            resolve({ success: true, ...response })
+          }
+        }
+      })
+    })
+  }
+}
+
 const toolHandlers: Record<string, ToolHandler> = {
   getPageTitle,
   openTab,
   captureScreenshot,
   getAccessibilitySnapshot,
+  findElements,
   clickElement,
-  fillInput
+  fillInput,
+  listen: plasmoWrapper(listenHandler)
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Marionette extension installed')
 })
 
-// Handle extension icon click to open side panel
-chrome.action.onClicked.addListener(async (tab) => {
-  console.log('Extension icon clicked, opening side panel')
-  
-  try {
-    // Open the side panel
-    await chrome.sidePanel.open({ tabId: tab.id })
-    console.log('Side panel opened successfully')
-  } catch (error) {
-    console.error('Failed to open side panel:', error)
-  }
-})
+// Popup opens automatically on click, no handler needed
 
 // Handle tool execution messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -62,11 +73,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 })
 
-// Set the side panel behavior
-chrome.runtime.onStartup.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
-})
-
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
-})
+// No side panel behavior needed for popup
