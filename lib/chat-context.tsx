@@ -2,11 +2,13 @@ import React, { createContext, useContext, useReducer, type ReactNode } from 're
 import { type Message, createUserMessage, createAssistantMessage } from './messages'
 import { streamResponse, getTokenUsage, destroySession as destroyAISession, interrupt as interruptAI } from './ai'
 import { parseToolCall, executeTool, detectInvalidToolFormat } from './tools'
+import { shouldSummarize, summarizeConversation, formatSummaryMessage } from './summarizer'
 
 interface ChatState {
   messages: Message[]
   isProcessing: boolean
   isWaitingForFirstChunk: boolean
+  isSummarizing: boolean
 }
 
 type ChatAction =
@@ -15,6 +17,7 @@ type ChatAction =
   | { type: 'UPDATE_MESSAGE_CONTEXT'; payload: { id: string; contextCount: number } }
   | { type: 'SET_PROCESSING'; payload: boolean }
   | { type: 'SET_WAITING'; payload: boolean }
+  | { type: 'SET_SUMMARIZING'; payload: boolean }
   | { type: 'RESET' }
 
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
@@ -48,8 +51,11 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     case 'SET_WAITING':
       return { ...state, isWaitingForFirstChunk: action.payload }
     
+    case 'SET_SUMMARIZING':
+      return { ...state, isSummarizing: action.payload }
+    
     case 'RESET':
-      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false }
+      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false }
     
     default:
       return state
@@ -70,8 +76,39 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(chatReducer, {
     messages: [],
     isProcessing: false,
-    isWaitingForFirstChunk: false
+    isWaitingForFirstChunk: false,
+    isSummarizing: false
   })
+
+  const checkAndSummarize = async () => {
+    const tokenUsage = getTokenUsage()
+    
+    if (shouldSummarize(tokenUsage.usage)) {
+      console.log('Context threshold reached, summarizing conversation...')
+      dispatch({ type: 'SET_SUMMARIZING', payload: true })
+      
+      try {
+        // Summarize current conversation
+        const summary = await summarizeConversation(state.messages)
+        
+        // Reset session
+        destroyAISession()
+        
+        // Clear messages and add summary
+        dispatch({ type: 'RESET' })
+        const summaryMessage = createAssistantMessage(formatSummaryMessage(summary), 0)
+        dispatch({ type: 'ADD_MESSAGE', payload: summaryMessage })
+        
+        console.log('Conversation summarized and reset')
+      } catch (error: any) {
+        console.error('Summarization failed:', error)
+        const errorMsg = createAssistantMessage(`Failed to summarize: ${error.message}`, 0)
+        dispatch({ type: 'ADD_MESSAGE', payload: errorMsg })
+      } finally {
+        dispatch({ type: 'SET_SUMMARIZING', payload: false })
+      }
+    }
+  }
 
   const sendMessage = async (userInput: string) => {
     dispatch({ type: 'SET_PROCESSING', payload: true })
@@ -103,6 +140,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       
       // Update message with context count
       dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: assistantMessageId, contextCount } })
+      
+      // Check if summarization is needed before tool loop
+      await checkAndSummarize()
       
       // Tool execution loop
       let currentContent = assistantContent
@@ -151,6 +191,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         }, resultToPass)
         
         dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: followupMessageId, contextCount: followupContextCount } })
+        
+        // Check if summarization is needed during tool loop
+        await checkAndSummarize()
         
         currentContent = followupContent
         loopCount++

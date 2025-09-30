@@ -174,6 +174,14 @@ const ChatInterface = () => {
           </div>
         )}
         
+        {/* Summarization indicator */}
+        {state.isSummarizing && (
+          <div className="mb-4 font-mono text-xs">
+            <div className="text-yellow-400 mb-1">SUMMARIZING</div>
+            <div className="text-gray-400">Condensing conversation to save context...</div>
+          </div>
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
 
