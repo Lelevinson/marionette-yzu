@@ -111,7 +111,7 @@ async function getAccessibilitySnapshot(params: any) {
         success: true,
         result: `TOO MANY ELEMENTS: Found ${elements.length} interactive elements.
 This page is too complex for getAccessibilitySnapshot.
-Use findElements with a specific query instead (e.g., "search", "submit", "login").`
+Use captureScreenshot to see the page visually instead.`
       }
     }
     
@@ -139,6 +139,7 @@ export const spec: ToolSpec = {
   name: 'getAccessibilitySnapshot',
   description: 'Gets a list of all interactive elements on the current page with their accessibility information',
   parameters: [],
+  spokenLine: "Let me see what's on this page",
   examples: [
     'User: "what can I click on this page?" → getAccessibilitySnapshot',
     'User: "show me the buttons" → getAccessibilitySnapshot',

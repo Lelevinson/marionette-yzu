@@ -22,9 +22,14 @@ export function detectInvalidToolFormat(content: string): string | null {
 }
 
 export function parseToolCall(content: string): ToolCall | null {
+  console.log('[parseToolCall] Checking content length:', content.length)
+  console.log('[parseToolCall] Content preview:', content.substring(0, 200))
+  
   if (content.includes('<function_call>')) {
+    console.log('[parseToolCall] Found <function_call> tag')
     const match = content.match(/<function_call>(.*?)<\/function_call>/s)
     if (match) {
+      console.log('[parseToolCall] Regex matched successfully')
       try {
         let jsonStr = match[1].trim()
         
@@ -56,21 +61,30 @@ export function parseToolCall(content: string): ToolCall | null {
         
         return parsed
       } catch (e) {
-        console.error('Failed to parse tool call JSON:', match[1], e)
+        console.error('[parseToolCall] Failed to parse JSON:', match[1], e)
         return null
       }
+    } else {
+      console.warn('[parseToolCall] Found <function_call> but regex did not match')
     }
+  } else {
+    console.log('[parseToolCall] No <function_call> tag found in content')
   }
   return null
 }
 
 export async function executeTool(toolCall: ToolCall): Promise<any> {
+  // Detect if we're in popup or sidepanel context
+  const isPopup = window.location.pathname.includes('popup.html')
+  const context = isPopup ? 'popup' : 'sidepanel'
+  
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({
       type: 'run_tool',
       payload: {
         toolName: toolCall.function,
-        parameters: toolCall.arguments
+        parameters: toolCall.arguments,
+        context: context
       }
     }, resolve)
   })

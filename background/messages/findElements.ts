@@ -147,6 +147,7 @@ export const spec: ToolSpec = {
       required: true
     }
   ],
+  spokenLine: "Looking for {query}",
   examples: [
     'User: "click the submit button" → findElements with query: "submit"',
     'User: "find the search box" → findElements with query: "search"',

@@ -11,7 +11,7 @@ import { isValidTool } from './lib/tool-registry'
 // Background script for Marionette extension
 
 // Tool handler registry - maps tool names to their implementations
-type ToolHandler = (params: any) => Promise<any>
+type ToolHandler = (params: any, context?: string) => Promise<any>
 
 // Wrapper for Plasmo message handlers
 const plasmoWrapper = (handler: any): ToolHandler => {
@@ -51,7 +51,7 @@ chrome.runtime.onInstalled.addListener(() => {
 // Handle tool execution messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'run_tool') {
-    const { toolName, parameters } = message.payload
+    const { toolName, parameters, context } = message.payload
     
     // Validate tool exists in registry
     if (!isValidTool(toolName)) {
@@ -62,7 +62,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Execute tool handler
     const handler = toolHandlers[toolName]
     if (handler) {
-      handler(parameters).then(sendResponse).catch(error => {
+      handler(parameters, context).then(sendResponse).catch(error => {
         sendResponse({ success: false, error: error.message })
       })
     } else {

@@ -20,6 +20,7 @@ export interface ToolSpec {
   description: string
   parameters: ToolParameter[]
   examples: string[]
+  spokenLine: string  // What AI says when executing this tool
   requiresUserGesture?: boolean  // If true, must be called from UI context
 }
 
@@ -90,4 +91,37 @@ export function requiresUserGesture(toolName: string): boolean {
 // Get all tools that require user gesture
 export function getUITools(): ToolSpec[] {
   return TOOL_REGISTRY.filter(tool => tool.requiresUserGesture)
+}
+
+// Get spoken line for a tool with parameter substitution
+export function getSpokenLine(toolName: string, params?: Record<string, any>): string {
+  const spec = getToolSpec(toolName)
+  if (!spec) {
+    return toolName // fallback to tool name if spec not found
+  }
+  
+  let spokenLine = spec.spokenLine
+  
+  // Replace parameters in the spoken line (e.g., {url}, {query}, {value})
+  if (params) {
+    Object.keys(params).forEach(key => {
+      const placeholder = `{${key}}`
+      if (spokenLine.includes(placeholder)) {
+        // For URLs, extract just the domain
+        if (key === 'url') {
+          try {
+            const url = new URL(params[key])
+            spokenLine = spokenLine.replace(placeholder, url.hostname)
+          } catch {
+            spokenLine = spokenLine.replace(placeholder, params[key])
+          }
+        } else {
+          // For other params, just replace with value
+          spokenLine = spokenLine.replace(placeholder, params[key])
+        }
+      }
+    })
+  }
+  
+  return spokenLine
 }

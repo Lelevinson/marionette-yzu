@@ -69,6 +69,7 @@ export const spec: ToolSpec = {
       required: true
     }
   ],
+  spokenLine: "Clicking",
   examples: [
     'User: "click the submit button" → First getAccessibilitySnapshot, then clickElement with the button\'s index',
     'After seeing snapshot with "[5] BUTTON: Submit" → clickElement with index: 5'

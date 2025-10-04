@@ -1,7 +1,15 @@
 import type { ToolSpec } from '../../lib/tool-registry'
 
-async function openTab(params: { url: string }) {
+async function openTab(params: { url: string }, context?: string) {
   try {
+    // Refuse to open tabs from popup context as it would close the popup
+    if (context === 'popup') {
+      return { 
+        success: false, 
+        error: 'Cannot open tabs from popup because it would close the popup window. Tell the user to open the side panel by clicking the maximize icon in the header, then they can open tabs from there.' 
+      }
+    }
+    
     if (!params.url) {
       return { success: false, error: 'URL is required' }
     }
@@ -28,6 +36,7 @@ export const spec: ToolSpec = {
       required: true
     }
   ],
+  spokenLine: "Opening {url}",
   examples: [
     'User: "open google" → openTab with url: "https://www.google.com"',
     'User: "go to reddit" → openTab with url: "https://www.reddit.com"',

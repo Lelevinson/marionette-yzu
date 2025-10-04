@@ -5,9 +5,18 @@ import { parseToolCall, executeTool, detectInvalidToolFormat } from './tools'
 import { shouldSummarize, summarizeConversation, formatSummaryMessage } from './summarizer'
 import { executeUITool, validateUITools } from './ui-tools'
 import { getToolSpec } from './tool-registry'
+import { isAIModelError } from './errors'
+import { type AlertAction, openAIFlagsPage } from './alert-context'
 
 // Validate UI tools on module load
 validateUITools()
+
+// Global error handler reference - set by AlertProvider
+let globalAlertHandler: ((type: 'error' | 'info', title: string, message: string, action?: AlertAction) => void) | null = null
+
+export const setGlobalAlertHandler = (handler: (type: 'error' | 'info', title: string, message: string, action?: AlertAction) => void) => {
+  globalAlertHandler = handler
+}
 
 interface ChatState {
   messages: Message[]
@@ -79,6 +88,7 @@ interface ChatContextValue {
   resetChat: () => void
   interruptChat: () => void
   copyContext: () => Promise<string>
+  isInitialLoadComplete: boolean
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -94,6 +104,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
   // Track if we need to rebuild AI context from restored messages
   const [needsContextRebuild, setNeedsContextRebuild] = React.useState(false)
+  
+  // Track if initial load from storage is complete
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = React.useState(false)
+  
+  // Track if we're currently syncing to avoid loops
+  const isSyncingRef = React.useRef(false)
 
   // Restore messages on mount
   React.useEffect(() => {
@@ -106,14 +122,59 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         // Mark that we need to rebuild context on next user message
         setNeedsContextRebuild(true)
       }
+      // Mark initial load as complete (whether we restored messages or not)
+      setIsInitialLoadComplete(true)
     })
+
+    // Listen for storage changes from other instances
+    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+      if (areaName !== 'local') return
+      if (!changes.chat_messages) return
+      if (isSyncingRef.current) return
+
+      const newMessages = changes.chat_messages.newValue
+
+      // Handle reset (messages cleared)
+      if (!newMessages || (Array.isArray(newMessages) && newMessages.length === 0)) {
+        console.log('Syncing reset from another instance')
+        dispatch({ type: 'RESET' })
+        return
+      }
+
+      // Handle message updates
+      if (Array.isArray(newMessages)) {
+        console.log('Syncing', newMessages.length, 'messages from another instance')
+        // Reset and rebuild with new messages
+        dispatch({ type: 'RESET' })
+        newMessages.forEach((msg: Message) => {
+          dispatch({ type: 'ADD_MESSAGE', payload: msg })
+        })
+        setNeedsContextRebuild(true)
+      }
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange)
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
   }, [])
 
   // Save messages to storage whenever they change
   React.useEffect(() => {
+    isSyncingRef.current = true
+    
     if (state.messages.length > 0) {
       chrome.storage.local.set({ chat_messages: state.messages })
+    } else {
+      // Clear storage when no messages
+      chrome.storage.local.remove(['chat_messages'])
     }
+    
+    // Reset sync flag after a brief delay to allow storage to update
+    setTimeout(() => {
+      isSyncingRef.current = false
+    }, 100)
   }, [state.messages])
 
   const checkAndSummarize = async () => {
@@ -151,6 +212,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     const hasUserActivation = (navigator as any).userActivation?.isActive
     console.log('sendMessage called - User activation at start:', hasUserActivation)
     
+    console.log('[PROCESSING] Setting to TRUE')
     dispatch({ type: 'SET_PROCESSING', payload: true })
     dispatch({ type: 'SET_WAITING', payload: true })
     
@@ -198,11 +260,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     let assistantMessageId = Date.now() + '_assistant'
     
     try {
+      console.log('[PROCESSING] Starting initial stream...')
       const contextCount = await streamResponse(messageToSend, (chunk: string) => {
         assistantContent += chunk
         
         if (assistantContent.length === chunk.length) {
           // First chunk - add message
+          console.log('[PROCESSING] First chunk received')
           dispatch({ type: 'SET_WAITING', payload: false })
           const assistantMessage = createAssistantMessage(assistantContent)
           assistantMessageId = assistantMessage.id
@@ -213,6 +277,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         }
       })
       
+      console.log('[PROCESSING] Initial stream complete, content length:', assistantContent.length)
+      
       // Update message with context count
       dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: assistantMessageId, contextCount } })
       
@@ -220,15 +286,18 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       await checkAndSummarize()
       
       // Tool execution loop
+      console.log('[PROCESSING] Entering tool execution loop')
       let currentContent = assistantContent
       let loopCount = 0
       const MAX_LOOPS = 60
       
       while (loopCount < MAX_LOOPS) {
+        console.log(`[PROCESSING] Loop ${loopCount + 1} - Checking for tool calls...`)
+        
         // Check for invalid format
         const invalidFormat = detectInvalidToolFormat(currentContent)
         if (invalidFormat) {
-          console.error('Invalid tool format detected:', invalidFormat)
+          console.error('[PROCESSING] Invalid tool format detected:', invalidFormat)
           const errorMessage = createAssistantMessage(`⚠️ FORMAT ERROR: ${invalidFormat}`, 0)
           dispatch({ type: 'ADD_MESSAGE', payload: { ...errorMessage, id: Date.now() + '_formaterror' } })
           break
@@ -237,13 +306,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         const toolCall = parseToolCall(currentContent)
         
         if (!toolCall) {
-          console.log('No tool call found, ending loop')
+          console.log('[PROCESSING] No tool call found, ending loop')
           break
         }
         
-        console.log(`Loop ${loopCount + 1} - Tool call:`, toolCall)
+        console.log(`[PROCESSING] Loop ${loopCount + 1} - Tool call found:`, toolCall.function)
         
         // Show which tool is executing
+        console.log('[PROCESSING] Setting executingTool to:', toolCall.function)
         dispatch({ type: 'SET_EXECUTING_TOOL', payload: toolCall.function })
         
         // Check if tool requires user gesture
@@ -251,17 +321,18 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         let toolResult: any
         
         if (toolSpec?.requiresUserGesture) {
-          console.log('Executing UI tool (user gesture required):', toolCall.function)
+          console.log('[PROCESSING] Executing UI tool (user gesture required):', toolCall.function)
           console.log('User activation before UI tool:', (navigator as any).userActivation?.isActive)
           toolResult = await executeUITool(toolCall)
         } else {
-          console.log('Executing background tool:', toolCall.function)
+          console.log('[PROCESSING] Executing background tool:', toolCall.function)
           toolResult = await executeTool(toolCall)
         }
         
-        console.log('Tool result:', toolResult)
+        console.log('[PROCESSING] Tool execution complete, result:', toolResult?.success ? 'SUCCESS' : 'FAILED')
         
         // Clear executing tool indicator
+        console.log('[PROCESSING] Clearing executingTool')
         dispatch({ type: 'SET_EXECUTING_TOOL', payload: null })
         
         // If tool failed, add context to help AI not retry
@@ -274,20 +345,25 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         const toolResultMessage = createAssistantMessage(`[TOOL RESULT]\n${resultToPass}`, 0)
         dispatch({ type: 'ADD_MESSAGE', payload: { ...toolResultMessage, id: Date.now() + '_toolresult_' + loopCount } })
         
-        // Get agent's response to tool result
+        // Get agent's response to tool result (loopback)
+        console.log(`[PROCESSING] Starting loopback ${loopCount + 1} - still processing...`)
         let followupContent = ""
         const followupMessageId = Date.now() + '_followup_' + loopCount
         
+        console.log(`[PROCESSING] Streaming loopback response ${loopCount + 1}...`)
         const followupContextCount = await streamResponse(messageToSend, (chunk: string) => {
           followupContent += chunk
           
           if (followupContent.length === chunk.length) {
+            console.log(`[PROCESSING] Loopback ${loopCount + 1} first chunk received`)
             const followupMessage = createAssistantMessage(followupContent, 0)
             dispatch({ type: 'ADD_MESSAGE', payload: { ...followupMessage, id: followupMessageId } })
           } else {
             dispatch({ type: 'UPDATE_MESSAGE', payload: { id: followupMessageId, content: followupContent } })
           }
         }, resultToPass)
+        
+        console.log(`[PROCESSING] Loopback ${loopCount + 1} complete, content length:`, followupContent.length)
         
         dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: followupMessageId, contextCount: followupContextCount } })
         
@@ -296,11 +372,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         
         currentContent = followupContent
         loopCount++
+        console.log(`[PROCESSING] Loop ${loopCount} complete, checking for next tool call...`)
       }
       
       if (loopCount >= MAX_LOOPS) {
-        console.warn('Reached max tool execution loops')
+        console.warn('[PROCESSING] Reached max tool execution loops')
       }
+      
+      console.log('[PROCESSING] Tool loop exited after', loopCount, 'iterations')
       
     } catch (error: any) {
       dispatch({ type: 'SET_WAITING', payload: false })
@@ -312,11 +391,23 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       } else {
         const errorMessage = createAssistantMessage(`ERROR: ${error.message}`, currentContextCount)
         dispatch({ type: 'ADD_MESSAGE', payload: errorMessage })
+        
+        // Show alert for AI model errors using proper type checking
+        if (globalAlertHandler && isAIModelError(error)) {
+          globalAlertHandler('error', 'AI Model Not Available',
+            'Enable Gemini Nano in Chrome flags and relaunch browser.',
+            {
+              label: 'Open Flags',
+              onClick: openAIFlagsPage
+            })
+        }
       }
+      console.log('[PROCESSING] Setting to FALSE (error path)')
       dispatch({ type: 'SET_PROCESSING', payload: false })
       return
     }
     
+    console.log('[PROCESSING] Setting to FALSE (completion path)')
     dispatch({ type: 'SET_PROCESSING', payload: false })
   }
 
@@ -379,7 +470,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <ChatContext.Provider value={{ state, dispatch, sendMessage, resetChat, interruptChat, copyContext }}>
+    <ChatContext.Provider value={{ state, dispatch, sendMessage, resetChat, interruptChat, copyContext, isInitialLoadComplete }}>
       {children}
     </ChatContext.Provider>
   )

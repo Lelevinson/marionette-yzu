@@ -23,6 +23,7 @@ export const spec: ToolSpec = {
   name: 'captureScreenshot',
   description: 'Takes a screenshot of the current active browser tab',
   parameters: [],
+  spokenLine: "Let me see what you're looking at",
   examples: [
     'User: "what am i seeing" → captureScreenshot',
     'User: "show me the page" → captureScreenshot',

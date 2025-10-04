@@ -97,6 +97,7 @@ export const spec: ToolSpec = {
       required: true
     }
   ],
+  spokenLine: "Entering {value}",
   examples: [
     'User: "fill the email field with test@example.com" → First getAccessibilitySnapshot to find email input, then fillInput with its index and value',
     'After seeing "[3] TEXTBOX: Email" → fillInput with index: 3, value: "test@example.com"'

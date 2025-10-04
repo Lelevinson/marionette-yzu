@@ -25,6 +25,7 @@ export const spec: ToolSpec = {
   name: 'getPageTitle',
   description: 'Gets the title of the current active browser tab',
   parameters: [],
+  spokenLine: "Let me check the page title",
   examples: [
     'User: "what\'s the page title" → getPageTitle',
     'User: "what page is this" → getPageTitle'

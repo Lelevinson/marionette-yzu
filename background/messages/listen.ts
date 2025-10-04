@@ -93,6 +93,7 @@ export const spec: ToolSpec = {
       required: false
     }
   ],
+  spokenLine: "Listening to the audio",
   examples: [
     'User: "listen to what\'s playing" → listen with seconds: 5',
     'User: "record the audio for 10 seconds" → listen with seconds: 10',

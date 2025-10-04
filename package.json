@@ -59,6 +59,9 @@
     "action": {
       "default_popup": "popup.html"
     },
+    "side_panel": {
+      "default_path": "sidepanel.html"
+    },
     "permissions": [
       "tabs",
       "activeTab",
@@ -67,7 +70,8 @@
       "storage",
       "unlimitedStorage",
       "alarms",
-      "audioCapture"
+      "audioCapture",
+      "sidePanel"
     ],
     "externally_connectable": {},
     "content_security_policy": {
