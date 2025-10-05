@@ -1,45 +1,10 @@
 // Simple AI module
-import { generateToolDocumentation, getToolNames, TOOL_REGISTRY } from './tool-registry'
-import { SYSTEM_PROMPT_TEMPLATE } from './system-prompt'
+import { TOOL_REGISTRY } from './tool-registry'
+import { getSystemPrompt } from './system-prompt'
 
 let aiSession: any = null
 let currentController: AbortController | null = null
 let filledSystemPrompt: string | null = null
-
-// Fill in runtime placeholders in the prompt
-function fillPromptPlaceholders(template: string): string {
-  const now = new Date()
-  
-  // Format date: e.g., "Tuesday, September 30, 2025"
-  const dateFormatter = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-  
-  // Format time: e.g., "14:35 PST"
-  const timeFormatter = new Intl.DateTimeFormat('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short'
-  })
-  
-  const placeholders: Record<string, string> = {
-    '{{CURRENT_DATE}}': dateFormatter.format(now),
-    '{{CURRENT_TIME}}': timeFormatter.format(now),
-    '{{TOOL_COUNT}}': TOOL_REGISTRY.length.toString(),
-    '{{TOOLS}}': generateToolDocumentation(),
-    '{{TOOL_NAMES}}': getToolNames().join(', ')
-  }
-  
-  let filled = template
-  for (const [placeholder, value] of Object.entries(placeholders)) {
-    filled = filled.replace(new RegExp(placeholder, 'g'), value)
-  }
-  
-  return filled
-}
 
 async function ensureSession() {
   if (!aiSession) {
@@ -49,7 +14,7 @@ async function ensureSession() {
     }
     
     // Fill template with runtime values
-    const prompt = fillPromptPlaceholders(SYSTEM_PROMPT_TEMPLATE)
+    const prompt = getSystemPrompt()
     
     // Store the filled prompt for debugging
     filledSystemPrompt = prompt
@@ -152,6 +117,6 @@ export function destroySession() {
   filledSystemPrompt = null
 }
 
-export function getSystemPrompt(): string | null {
+export function getFilledSystemPrompt(): string | null {
   return filledSystemPrompt
 }

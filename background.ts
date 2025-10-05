@@ -1,3 +1,4 @@
+import think from './background/messages/think'
 import getPageTitle from './background/messages/getPageTitle'
 import openTab from './background/messages/openTab'
 import captureScreenshot from './background/messages/captureScreenshot'
@@ -6,7 +7,18 @@ import findElements from './background/messages/findElements'
 import clickElement from './background/messages/clickElement'
 import fillInput from './background/messages/fillInput'
 import listenHandler from './background/messages/listen'
+import storeMemory from './background/messages/storeMemory'
+import getMemories from './background/messages/getMemories'
+import scrollUp from './background/messages/scrollUp'
+import scrollDown from './background/messages/scrollDown'
+import highlightSelector from './background/messages/highlightSelector'
+import highlightText from './background/messages/highlightText'
+import captureCurrentPage from './background/messages/captureCurrentPage'
+import searchVault from './background/messages/searchVault'
+import getVaultStats from './background/messages/getVaultStats'
+import getPlaybook from './background/messages/getPlaybook'
 import { isValidTool } from './lib/tool-registry'
+import { autoCapturePage } from './lib/auto-capture'
 
 // Background script for Marionette extension
 
@@ -32,6 +44,7 @@ const plasmoWrapper = (handler: any): ToolHandler => {
 }
 
 const toolHandlers: Record<string, ToolHandler> = {
+  think,
   getPageTitle,
   openTab,
   captureScreenshot,
@@ -39,11 +52,36 @@ const toolHandlers: Record<string, ToolHandler> = {
   findElements,
   clickElement,
   fillInput,
-  listen: plasmoWrapper(listenHandler)
+  listen: plasmoWrapper(listenHandler),
+  storeMemory,
+  getMemories,
+  scrollUp,
+  scrollDown,
+  highlightSelector,
+  highlightText,
+  captureCurrentPage,
+  searchVault,
+  getVaultStats,
+  getPlaybook
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Marionette extension installed')
+})
+
+// Auto-capture pages after they load
+chrome.webNavigation.onCompleted.addListener((details) => {
+  // Only capture main frame (not iframes)
+  if (details.frameId !== 0) {
+    return
+  }
+  
+  // Wait 3 seconds for page to settle before capturing
+  setTimeout(() => {
+    autoCapturePage(details.tabId, details.url).catch(error => {
+      console.error('[Background] Auto-capture failed:', error)
+    })
+  }, 3000)
 })
 
 // Popup opens automatically on click, no handler needed

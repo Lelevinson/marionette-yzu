@@ -1,7 +1,10 @@
 import type { ToolSpec } from '../../lib/tool-registry'
+import { generateEmbedding, cosineSimilarity } from '../../lib/embeddings'
 
 async function getAccessibilitySnapshot(params: any) {
   try {
+    const { query } = params // Optional semantic search query
+    
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tab?.id) {
       return { success: false, error: 'No active tab found' }
@@ -30,13 +33,24 @@ async function getAccessibilitySnapshot(params: any) {
         const allElements = document.querySelectorAll(interactiveSelectors.join(','))
         
         allElements.forEach((el) => {
-          // Skip hidden elements
-          const style = window.getComputedStyle(el)
+          const htmlEl = el as HTMLElement
+          
+          // Skip hidden or non-visible elements
+          const style = window.getComputedStyle(htmlEl)
           if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
             return
           }
           
-          const htmlEl = el as HTMLElement
+          // Skip elements with zero size (dummy/hidden elements)
+          const rect = htmlEl.getBoundingClientRect()
+          if (rect.width === 0 || rect.height === 0) {
+            return
+          }
+          
+          // Skip elements far offscreen (more than 10000px away)
+          if (rect.top < -10000 || rect.left < -10000) {
+            return
+          }
           
           // Compute accessible name
           let accessibleName = ''
@@ -104,26 +118,66 @@ async function getAccessibilitySnapshot(params: any) {
       }
     }
     
-    // Check if page is too complex
+    let filteredElements = elements
+    let wasFiltered = false
+    
+    // Use semantic filtering if page is complex AND query is provided
+    const SEMANTIC_FILTER_THRESHOLD = 50
+    if (elements.length > SEMANTIC_FILTER_THRESHOLD && query && typeof query === 'string') {
+      try {
+        console.log('[getAccessibilitySnapshot] Page has', elements.length, 'elements, using semantic filtering...')
+        console.log('[getAccessibilitySnapshot] Query:', query)
+        
+        // Generate query embedding
+        const queryEmbedding = await generateEmbedding(query)
+        
+        // Generate embeddings for each element (combine role + name for context)
+        const elementsWithSimilarity = await Promise.all(
+          elements.map(async (el: any) => {
+            const elementText = `${el.role} ${el.name}`.trim()
+            const embedding = await generateEmbedding(elementText)
+            const similarity = cosineSimilarity(queryEmbedding, embedding)
+            return { ...el, similarity }
+          })
+        )
+        
+        // Sort by similarity and take top 10
+        elementsWithSimilarity.sort((a, b) => b.similarity - a.similarity)
+        filteredElements = elementsWithSimilarity.slice(0, 10)
+        wasFiltered = true
+        
+        console.log('[getAccessibilitySnapshot] Filtered to top 10 elements')
+        console.log('[getAccessibilitySnapshot] Top similarities:', 
+          filteredElements.slice(0, 3).map(e => `${(e.similarity * 100).toFixed(0)}%`).join(', '))
+      } catch (embError) {
+        console.warn('[getAccessibilitySnapshot] Semantic filtering failed, showing all:', embError)
+        // Fall through to show warning about too many elements
+      }
+    }
+    
+    // Check if page is still too complex after filtering
     const MAX_ELEMENTS_TO_SHOW = 100
-    if (elements.length > MAX_ELEMENTS_TO_SHOW) {
+    if (filteredElements.length > MAX_ELEMENTS_TO_SHOW) {
       return {
         success: true,
         result: `TOO MANY ELEMENTS: Found ${elements.length} interactive elements.
 This page is too complex for getAccessibilitySnapshot.
-Use captureScreenshot to see the page visually instead.`
+Try using captureScreenshot, or call getAccessibilitySnapshot with a "query" parameter for semantic filtering.`
       }
     }
     
     // Format as readable text
-    let output = `Found ${elements.length} interactive elements:\n\n`
+    let output = wasFiltered 
+      ? `Found ${elements.length} elements, filtered to top ${filteredElements.length} most relevant to "${query}":\n\n`
+      : `Found ${filteredElements.length} interactive elements:\n\n`
     
-    elements.forEach((el: any) => {
+    filteredElements.forEach((el: any) => {
       const disabled = el.disabled ? ' [DISABLED]' : ''
       const type = el.type ? ` (type: ${el.type})` : ''
       const href = el.href ? ` (${el.href})` : ''
+      const similarity = el.similarity ? ` [${(el.similarity * 100).toFixed(0)}% match]` : ''
       
-      output += `[${el.index}] ${el.role.toUpperCase()}: "${el.name}"${type}${href}${disabled}\n`
+      output += `[${el.index}] ${el.role.toUpperCase()}: "${el.name}"${type}${href}${disabled}${similarity}\n`
     })
     
     return { 
@@ -137,13 +191,21 @@ Use captureScreenshot to see the page visually instead.`
 
 export const spec: ToolSpec = {
   name: 'getAccessibilitySnapshot',
-  description: 'Gets a list of all interactive elements on the current page with their accessibility information',
-  parameters: [],
+  description: 'Gets a list of all interactive elements on the current page with their accessibility information. For complex pages with 50+ elements, provide a query parameter to use AI-powered semantic filtering.',
+  parameters: [
+    {
+      name: 'query',
+      type: 'string',
+      description: 'Optional: Semantic search query to filter elements on complex pages (e.g., "submit button", "login form", "navigation menu")',
+      required: false
+    }
+  ],
   spokenLine: "Let me see what's on this page",
   examples: [
     'User: "what can I click on this page?" → getAccessibilitySnapshot',
     'User: "show me the buttons" → getAccessibilitySnapshot',
-    'User: "list all links" → getAccessibilitySnapshot'
+    'User: "list all links" → getAccessibilitySnapshot',
+    'Complex page with many elements → getAccessibilitySnapshot with query: "submit button"'
   ]
 }
 

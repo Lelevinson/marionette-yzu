@@ -7,6 +7,20 @@ import { spec as clickElementSpec } from '../background/messages/clickElement'
 import { spec as fillInputSpec } from '../background/messages/fillInput'
 import { spec as findElementsSpec } from '../background/messages/findElements'
 import { spec as listenSpec } from '../background/messages/listen'
+import { spec as writeContentSpec } from '../background/messages/writeContent'
+import { spec as storeMemorySpec } from '../background/messages/storeMemory'
+import { spec as getMemoriesSpec } from '../background/messages/getMemories'
+import { spec as translateTextSpec } from '../background/messages/translateText'
+import { spec as detectLanguageSpec } from '../background/messages/detectLanguage'
+import { spec as scrollUpSpec } from '../background/messages/scrollUp'
+import { spec as scrollDownSpec } from '../background/messages/scrollDown'
+import { spec as highlightSelectorSpec } from '../background/messages/highlightSelector'
+import { spec as highlightTextSpec } from '../background/messages/highlightText'
+import { spec as captureCurrentPageSpec } from '../background/messages/captureCurrentPage'
+import { spec as searchVaultSpec } from '../background/messages/searchVault'
+import { spec as getVaultStatsSpec } from '../background/messages/getVaultStats'
+import { spec as getPlaybookSpec } from '../background/messages/getPlaybook'
+import { spec as thinkSpec } from '../background/messages/think'
 
 export interface ToolParameter {
   name: string
@@ -26,6 +40,7 @@ export interface ToolSpec {
 
 // Automatically aggregated from tool modules
 export const TOOL_REGISTRY: ToolSpec[] = [
+  thinkSpec,
   captureScreenshotSpec,
   getPageTitleSpec,
   openTabSpec,
@@ -33,38 +48,26 @@ export const TOOL_REGISTRY: ToolSpec[] = [
   findElementsSpec,
   clickElementSpec,
   fillInputSpec,
-  listenSpec
+  listenSpec,
+  writeContentSpec,
+  storeMemorySpec,
+  getMemoriesSpec,
+  translateTextSpec,
+  detectLanguageSpec,
+  scrollUpSpec,
+  scrollDownSpec,
+  highlightSelectorSpec,
+  highlightTextSpec,
+  captureCurrentPageSpec,
+  searchVaultSpec,
+  getVaultStatsSpec,
+  getPlaybookSpec
 ]
 
-// Generate formatted tool documentation for the system prompt
-export function generateToolDocumentation(): string {
-  let doc = ''
-  
-  for (const tool of TOOL_REGISTRY) {
-    doc += `### ${tool.name}\n\n`
-    doc += `${tool.description}\n\n`
-    
-    if (tool.parameters.length > 0) {
-      doc += '**Parameters:**\n'
-      for (const param of tool.parameters) {
-        const requiredTag = param.required ? '(required)' : '(optional)'
-        doc += `- \`${param.name}\` (${param.type}) ${requiredTag}: ${param.description}\n`
-      }
-      doc += '\n'
-    } else {
-      doc += '**Parameters:** None\n\n'
-    }
-    
-    if (tool.examples.length > 0) {
-      doc += '**Usage Examples:**\n'
-      for (const example of tool.examples) {
-        doc += `- ${example}\n`
-      }
-      doc += '\n'
-    }
-  }
-  
-  return doc
+// Generate formatted tool documentation for specific tools
+export function generateToolDocumentation(toolNames?: string[]): string {
+  const { generateToolDocumentation: genDocs } = require('./tool-docs')
+  return genDocs(TOOL_REGISTRY, toolNames)
 }
 
 // Get list of tool names for quick reference

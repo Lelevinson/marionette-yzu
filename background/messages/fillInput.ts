@@ -1,5 +1,11 @@
 import type { ToolSpec } from '../../lib/tool-registry'
 
+type FillResult = {
+  success: boolean
+  error?: string
+  message?: string
+}
+
 async function fillInput(params: { index: number, value: string }) {
   try {
     if (params.index === undefined || params.index === null) {
@@ -15,60 +21,29 @@ async function fillInput(params: { index: number, value: string }) {
       return { success: false, error: 'No active tab found' }
     }
 
-    const result = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (index: number, value: string) => {
-        const element = document.querySelector(`[data-marionette-${index}]`)
-        
-        if (!element) {
-          return { success: false, error: `Element with index ${index} not found. Run getAccessibilitySnapshot first.` }
+    // ALL fillInput goes through content script
+    const contentResponse = await new Promise<{ success: boolean; result?: string; error?: string }>((resolve) => {
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'fill_input',
+        selector: `[data-marionette-${params.index}]`,
+        value: params.value
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ success: false, error: chrome.runtime.lastError.message })
+        } else {
+          resolve(response || { success: false, error: "No response from content script" })
         }
-        
-        // Check if it's an input or textarea
-        if (!(element instanceof HTMLInputElement) && !(element instanceof HTMLTextAreaElement)) {
-          return { success: false, error: 'Element is not an input or textarea' }
-        }
-        
-        // Check if element is disabled or readonly
-        if (element.hasAttribute('disabled')) {
-          return { success: false, error: 'Element is disabled' }
-        }
-        
-        if (element.hasAttribute('readonly')) {
-          return { success: false, error: 'Element is readonly' }
-        }
-        
-        // Scroll into view
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        
-        // Focus the element
-        element.focus()
-        
-        // Set the value
-        element.value = value
-        
-        // Dispatch input and change events to trigger any listeners
-        element.dispatchEvent(new Event('input', { bubbles: true }))
-        element.dispatchEvent(new Event('change', { bubbles: true }))
-        
-        // Get element info for confirmation
-        const name = element.getAttribute('aria-label') || 
-                     element.labels?.[0]?.textContent?.trim() || 
-                     element.placeholder || 
-                     'input field'
-        
-        return { 
-          success: true, 
-          message: `Filled "${name.substring(0, 50)}" with "${value.substring(0, 30)}${value.length > 30 ? '...' : ''}"` 
-        }
-      },
-      args: [params.index, params.value]
+      })
     })
-
-    const response = result[0]?.result
+    
+    if (!contentResponse.success) {
+      return { success: false, error: contentResponse.error || 'Content script failed' }
+    }
+    
+    const response = { success: true, message: contentResponse.result } as FillResult
     
     if (response?.success === false) {
-      return { success: false, error: response.error }
+      return { success: false, error: response.error || 'Unknown error' }
     }
     
     return { 

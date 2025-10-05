@@ -21,6 +21,13 @@ export class SpeechRecognitionUnavailableError extends Error {
   }
 }
 
+export class WriterAPIUnavailableError extends Error {
+  constructor(message = 'Writer API is not available') {
+    super(message)
+    this.name = 'WriterAPIUnavailableError'
+  }
+}
+
 export function isAIModelError(error: any): error is AIModelUnavailableError {
   return error instanceof AIModelUnavailableError || error?.name === 'AIModelUnavailableError'
 }
@@ -31,5 +38,11 @@ export function isMicrophoneError(error: any): error is MicrophonePermissionErro
 
 export function isSpeechRecognitionError(error: any): error is SpeechRecognitionUnavailableError {
   return error instanceof SpeechRecognitionUnavailableError || error?.name === 'SpeechRecognitionUnavailableError'
+}
+
+export function isWriterAPIError(error: any): error is WriterAPIUnavailableError {
+  return error instanceof WriterAPIUnavailableError || 
+         error?.name === 'WriterAPIUnavailableError' ||
+         error?.message === 'WRITER_API_UNAVAILABLE'
 }
 

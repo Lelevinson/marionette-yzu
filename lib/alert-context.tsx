@@ -21,6 +21,24 @@ export const openAIFlagsPage = () => {
   chrome.tabs.create({ url })
 }
 
+// Helper to open Chrome flags for Writer API
+export const openWriterAPIFlagsPage = () => {
+  const url = 'chrome://flags/#writer-api-for-gemini-nano'
+  chrome.tabs.create({ url })
+}
+
+// Helper to open Chrome flags for Translator API
+export const openTranslatorAPIFlagsPage = () => {
+  const url = 'chrome://flags/#translation-api'
+  chrome.tabs.create({ url })
+}
+
+// Helper to open Chrome flags for Language Detector API
+export const openLanguageDetectorAPIFlagsPage = () => {
+  const url = 'chrome://flags/#language-detection-api'
+  chrome.tabs.create({ url })
+}
+
 interface Alert {
   id: string
   type: AlertType

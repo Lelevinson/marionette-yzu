@@ -10,7 +10,86 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse({ error: error.message }))
     return true // Indicates async response
   }
+  
+  if (message.type === 'fill_input') {
+    console.log('[CONTENT] Received fill_input message:', message)
+    handleFillInput(message.selector, message.value)
+      .then(result => {
+        console.log('[CONTENT] Fill succeeded:', result)
+        sendResponse({ success: true, result })
+      })
+      .catch(error => {
+        console.error('[CONTENT] Fill failed:', error)
+        sendResponse({ success: false, error: error.message })
+      })
+    return true // Indicates async response
+  }
 })
+
+async function handleFillInput(selector: string, value: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const element = document.querySelector(selector) as HTMLElement
+    
+    if (!element) {
+      reject(new Error(`Element not found: ${selector}`))
+      return
+    }
+    
+    // Check element type
+    const isInput = element instanceof HTMLInputElement
+    const isTextarea = element instanceof HTMLTextAreaElement
+    const isContentEditable = element.getAttribute('contenteditable') === 'true' || 
+                              element.getAttribute('role') === 'textbox'
+    
+    if (!isInput && !isTextarea && !isContentEditable) {
+      reject(new Error('Element is not an input, textarea, or contenteditable'))
+      return
+    }
+    
+    // Scroll into view
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    element.focus()
+    
+    if (isContentEditable) {
+      // For contenteditable (Gmail, rich editors): click + focus + wait + execCommand
+      element.click()
+      element.focus()
+      
+      setTimeout(() => {
+        try {
+          const success = document.execCommand('insertText', false, value)
+          
+          if (!success) {
+            // Fallback
+            element.textContent = value
+            element.dispatchEvent(new InputEvent('input', { bubbles: true }))
+          }
+          
+          const name = element.getAttribute('aria-label') || 'input field'
+          resolve(`Filled "${name.substring(0, 50)}"`)
+        } catch (error: any) {
+          reject(error)
+        }
+      }, 100)
+    } else {
+      // For regular inputs/textareas: direct value assignment
+      try {
+        const inputElement = element as HTMLInputElement | HTMLTextAreaElement
+        inputElement.value = value
+        inputElement.dispatchEvent(new Event('input', { bubbles: true }))
+        inputElement.dispatchEvent(new Event('change', { bubbles: true }))
+        
+        const name = element.getAttribute('aria-label') || 
+                     inputElement.labels?.[0]?.textContent?.trim() ||
+                     inputElement.placeholder || 
+                     'input field'
+        resolve(`Filled "${name.substring(0, 50)}"`)
+      } catch (error: any) {
+        reject(error)
+      }
+    }
+  })
+}
 
 async function handleTabAudioCapture(streamId: string, duration: number): Promise<string> {
   try {

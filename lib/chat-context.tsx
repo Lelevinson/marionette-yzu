@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useReducer, type ReactNode } from 'react'
 import { type Message, createUserMessage, createAssistantMessage } from './messages'
-import { streamResponse, getTokenUsage, destroySession as destroyAISession, interrupt as interruptAI, getSystemPrompt } from './ai'
+import { streamResponse, getTokenUsage, destroySession as destroyAISession, interrupt as interruptAI, getFilledSystemPrompt } from './ai'
 import { parseToolCall, executeTool, detectInvalidToolFormat } from './tools'
 import { shouldSummarize, summarizeConversation, formatSummaryMessage } from './summarizer'
 import { executeUITool, validateUITools } from './ui-tools'
 import { getToolSpec } from './tool-registry'
-import { isAIModelError } from './errors'
-import { type AlertAction, openAIFlagsPage } from './alert-context'
+import { isAIModelError, isWriterAPIError } from './errors'
+import { type AlertAction, openAIFlagsPage, openWriterAPIFlagsPage } from './alert-context'
 
 // Validate UI tools on module load
 validateUITools()
@@ -291,6 +291,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       let loopCount = 0
       const MAX_LOOPS = 60
       
+      // Track recent tool calls to detect infinite loops
+      const recentToolCalls: Array<{name: string, args: string}> = []
+      
       while (loopCount < MAX_LOOPS) {
         console.log(`[PROCESSING] Loop ${loopCount + 1} - Checking for tool calls...`)
         
@@ -311,6 +314,34 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         }
         
         console.log(`[PROCESSING] Loop ${loopCount + 1} - Tool call found:`, toolCall.function)
+        
+        // Detect infinite loops - same tool called 3+ times consecutively
+        recentToolCalls.push({ name: toolCall.function, args: JSON.stringify(toolCall.arguments) })
+        
+        // Keep only last 5 tool calls
+        if (recentToolCalls.length > 5) {
+          recentToolCalls.shift()
+        }
+        
+        // Check for loop: last 3 calls are the same tool
+        if (recentToolCalls.length >= 3) {
+          const lastThree = recentToolCalls.slice(-3)
+          const allSameTool = lastThree.every(call => call.name === lastThree[0].name)
+          
+          if (allSameTool) {
+            const toolName = lastThree[0].name
+            console.error(`[PROCESSING] INFINITE LOOP DETECTED: ${toolName} called 3 times consecutively`)
+            
+            const loopMessage = createAssistantMessage(
+              `⚠️ LOOP DETECTED: You've called ${toolName} three times in a row. ` +
+              `Stop calling tools and provide your final answer based on the information you already have. ` +
+              `Describe what you see or learned from the previous tool results.`,
+              0
+            )
+            dispatch({ type: 'ADD_MESSAGE', payload: { ...loopMessage, id: Date.now() + '_loopdetected' } })
+            break
+          }
+        }
         
         // Show which tool is executing
         console.log('[PROCESSING] Setting executingTool to:', toolCall.function)
@@ -401,6 +432,16 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
               onClick: openAIFlagsPage
             })
         }
+        
+        // Show alert for Writer API errors
+        if (globalAlertHandler && isWriterAPIError(error)) {
+          globalAlertHandler('error', 'Writer API Not Available',
+            'Enable the Writer API in Chrome flags and relaunch browser.',
+            {
+              label: 'Open Flags',
+              onClick: openWriterAPIFlagsPage
+            })
+        }
       }
       console.log('[PROCESSING] Setting to FALSE (error path)')
       dispatch({ type: 'SET_PROCESSING', payload: false })
@@ -426,7 +467,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const copyContext = async (): Promise<string> => {
-    const systemPrompt = getSystemPrompt()
+    const systemPrompt = getFilledSystemPrompt()
     
     let contextText = ''
     

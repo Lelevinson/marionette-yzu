@@ -34,13 +34,24 @@ async function findElements(params: { query: string }) {
         const allElements = document.querySelectorAll(interactiveSelectors.join(','))
         
         allElements.forEach((el) => {
-          // Skip hidden elements
-          const style = window.getComputedStyle(el)
+          const htmlEl = el as HTMLElement
+          
+          // Skip hidden or non-visible elements
+          const style = window.getComputedStyle(htmlEl)
           if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
             return
           }
           
-          const htmlEl = el as HTMLElement
+          // Skip elements with zero size (dummy/hidden elements)
+          const rect = htmlEl.getBoundingClientRect()
+          if (rect.width === 0 || rect.height === 0) {
+            return
+          }
+          
+          // Skip elements far offscreen (more than 10000px away)
+          if (rect.top < -10000 || rect.left < -10000) {
+            return
+          }
           
           // Compute accessible name
           let accessibleName = ''
@@ -71,10 +82,14 @@ async function findElements(params: { query: string }) {
             else if (tagName === 'select') role = 'combobox'
           }
           
-          // Filter by query - check role, name, tag, type
+          // Filter by query - check role, name, tag, type (fuzzy + case insensitive)
           const searchableText = `${role} ${accessibleName} ${htmlEl.tagName}`.toLowerCase()
           
-          if (!searchableText.includes(query)) {
+          // Fuzzy matching: split query into words and check if all words appear (in any order)
+          const queryWords = query.trim().split(/\s+/)
+          const allWordsMatch = queryWords.every(word => searchableText.includes(word))
+          
+          if (!allWordsMatch) {
             globalIndex++
             return
           }
