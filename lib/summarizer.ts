@@ -2,7 +2,7 @@
 import type { Message } from './messages'
 
 const MAX_CONTEXT_SIZE = 9216
-const SUMMARIZATION_THRESHOLD = 0.7 // 70%
+const SUMMARIZATION_THRESHOLD = 0.5 // 50%
 
 export function shouldSummarize(currentTokens: number): boolean {
   return currentTokens >= MAX_CONTEXT_SIZE * SUMMARIZATION_THRESHOLD
@@ -36,7 +36,33 @@ export async function summarizeConversation(messages: Message[]): Promise<string
 
     // Format conversation for summarization
     const conversationText = messages
-      .map(msg => `${msg.role.toUpperCase()}: ${msg.content}`)
+      .map(msg => {
+        let content = msg.content
+
+        // Truncate base64 images
+        if (content.includes('data:image/')) {
+          content = content.replace(
+            /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+            (match) => {
+              const preview = match.substring(0, 50)
+              return `${preview}... [IMAGE_TRUNCATED_${match.length}_CHARS]`
+            }
+          )
+        }
+
+        // Truncate base64 audio
+        if (content.includes('data:audio/')) {
+          content = content.replace(
+            /data:audio\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+            (match) => {
+              const preview = match.substring(0, 50)
+              return `${preview}... [AUDIO_TRUNCATED_${match.length}_CHARS]`
+            }
+          )
+        }
+
+        return `${msg.role.toUpperCase()}: ${content}`
+      })
       .join('\n\n')
 
     // Get summary

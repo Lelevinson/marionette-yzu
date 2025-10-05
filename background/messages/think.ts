@@ -37,7 +37,7 @@ export const spec: ToolSpec = {
     'When making a decision → think with reasoning: "I see two options. Option A is better because..."',
     'Before a complex workflow → think with reasoning: "This requires the google-search playbook. Steps: ..."'
   ],
-  spokenLine: '💭 Thinking...'
+  spokenLine: 'Thinking...'
 }
 
 export default think
