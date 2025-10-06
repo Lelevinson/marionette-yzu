@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from "react"
-import { Bug, Mic, RotateCcw, Maximize2, Settings, Flag } from "lucide-react"
+import { Bug, Mic, RotateCcw, Maximize2, Settings, Flag, Volume2, VolumeX } from "lucide-react"
 import { useVoiceInput } from "../lib/use-voice-input"
 import { useChatContext } from "../lib/chat-context"
 import { useTTS } from "../lib/tts-context"
@@ -34,11 +34,22 @@ const getCompleteSentences = (text: string): string => {
 export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreenProps) => {
   const { isListening, transcript, handleMicClick } = useVoiceInput()
   const { state, sendMessage, resetChat, isInitialLoadComplete } = useChatContext()
-  const { handleNewText, stop, currentSentence, isSpeaking } = useTTS()
+  const { handleNewText, stop, currentSentence, isSpeaking, audioEnabled, setAudioEnabled } = useTTS()
   const [textInput, setTextInput] = useState("")
   
   // Track last spoken assistant message to avoid replaying
   const lastSpokenTextRef = useRef<string>('')
+  
+  // Get latest context count
+  const latestContextCount = useMemo(() => {
+    for (let i = state.messages.length - 1; i >= 0; i--) {
+      const msg = state.messages[i]
+      if (msg.contextCount !== undefined) {
+        return msg.contextCount
+      }
+    }
+    return 0
+  }, [state.messages])
   
   // Mark initial load complete and record existing assistant messages
   useEffect(() => {
@@ -135,8 +146,54 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
     >
       {/* Header */}
       <div className="p-3 border-b border-gray-800 flex justify-between items-center">
-        <div className="font-mono text-sm">MARIONETTE</div>
+        <div className="flex items-center gap-3">
+          <div className="font-mono text-sm">MARIONETTE</div>
+          
+          {/* Context Indicator */}
+          <div 
+            className="relative group cursor-help"
+            title={`${latestContextCount}/9216 tokens`}
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" className="transform -rotate-90">
+              {/* Background circle */}
+              <circle
+                cx="10"
+                cy="10"
+                r="8"
+                fill="none"
+                stroke="rgb(31, 41, 55)"
+                strokeWidth="2"
+              />
+              {/* Progress circle */}
+              {latestContextCount > 0 && (
+                <circle
+                  cx="10"
+                  cy="10"
+                  r="8"
+                  fill="none"
+                  stroke={latestContextCount > 7372 ? "rgb(239, 68, 68)" : latestContextCount > 4608 ? "rgb(251, 191, 36)" : "rgb(34, 197, 94)"}
+                  strokeWidth="2"
+                  strokeDasharray={`${(latestContextCount / 9216) * 50.265} 50.265`}
+                  strokeLinecap="round"
+                  className="transition-all duration-300"
+                />
+              )}
+            </svg>
+            
+            {/* Tooltip on hover */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-[10px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+              {latestContextCount}/9216
+            </div>
+          </div>
+        </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setAudioEnabled(!audioEnabled)}
+            className="p-1 hover:bg-gray-800 rounded"
+            title={audioEnabled ? "Mute audio" : "Unmute audio"}
+          >
+            {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-gray-500" />}
+          </button>
           <button
             onClick={openPermissionsPage}
             className="p-1 hover:bg-gray-800 rounded"

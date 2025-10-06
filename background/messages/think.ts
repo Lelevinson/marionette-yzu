@@ -33,9 +33,9 @@ export const spec: ToolSpec = {
     }
   ],
   examples: [
-    'Before starting a task → think with reasoning: "The user wants X. I need to: 1) Do A, 2) Do B, 3) Do C"',
-    'When making a decision → think with reasoning: "I see two options. Option A is better because..."',
-    'Before a complex workflow → think with reasoning: "This requires the google-search playbook. Steps: ..."'
+    'User: "search for weather forecast" → think with reasoning: "Need google-search playbook. Steps: open Google, find search box, enter query, submit"',
+    'Complex multi-step task → think with reasoning: "User wants X. I need to: 1) Do A, 2) Do B, 3) Do C"',
+    'Ambiguous request → think with reasoning: "User might mean A or B. Based on context, I\'ll choose A because..."'
   ],
   spokenLine: 'Thinking...'
 }

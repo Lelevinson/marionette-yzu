@@ -11,6 +11,8 @@ interface TTSContextValue {
   handleNewText: (text: string) => void
   currentSentence: string
   queueLength: number
+  audioEnabled: boolean
+  setAudioEnabled: (enabled: boolean) => void
 }
 
 const TTSContext = createContext<TTSContextValue | null>(null)
@@ -48,6 +50,7 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [currentSentence, setCurrentSentence] = useState<string>('')
   const [queueLength, setQueueLength] = useState(0)
+  const [audioEnabled, setAudioEnabled] = useState(true)
   
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
   const sentenceQueueRef = useRef<string[]>([])
@@ -55,6 +58,7 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
   const timeoutRef = useRef<number | null>(null)
   const lastSpokenSentencesRef = useRef<string[]>([])
   const currentTextRef = useRef<string>('')
+  const isInitialMount = useRef(true)
 
   const loadVoices = useCallback(() => {
     console.log('[TTS] Loading voices...')
@@ -81,6 +85,16 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     })
   }, [])
 
+  // Load audio preference immediately on mount
+  useEffect(() => {
+    chrome.storage.local.get(['tts_audio_enabled'], (result) => {
+      if (result.tts_audio_enabled !== undefined) {
+        console.log('[TTS] Loaded audio enabled from storage:', result.tts_audio_enabled)
+        setAudioEnabled(result.tts_audio_enabled)
+      }
+    })
+  }, [])
+
   useEffect(() => {
     console.log('[TTS] TTSProvider mounted')
     console.log('[TTS] speechSynthesis available:', 'speechSynthesis' in window)
@@ -98,6 +112,16 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
       chrome.storage.local.set({ tts_voice_uri: selectedVoiceUri })
     }
   }, [selectedVoiceUri])
+
+  // Save to storage when audio enabled changes (skip initial mount)
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    console.log('[TTS] Saving audio enabled to storage:', audioEnabled)
+    chrome.storage.local.set({ tts_audio_enabled: audioEnabled })
+  }, [audioEnabled])
 
   const stop = useCallback(() => {
     console.log('[TTS] Stopping all speech and clearing queue')
@@ -141,6 +165,9 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     setIsSpeaking(true)
     
     const utterance = new SpeechSynthesisUtterance(sentence)
+    
+    // Set volume based on audioEnabled (0 = muted, 1 = full volume)
+    utterance.volume = audioEnabled ? 1 : 0
     
     // Set voice
     if (selectedVoiceUri) {
@@ -209,7 +236,7 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
       isProcessingQueueRef.current = false
       processNextInQueue()
     }
-  }, [selectedVoiceUri, availableVoices])
+  }, [selectedVoiceUri, availableVoices, audioEnabled])
 
   const speak = useCallback((text: string) => {
     console.log('[TTS] speak() called (legacy support) - redirecting to queue')
@@ -350,7 +377,9 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
       previewVoice,
       handleNewText,
       currentSentence,
-      queueLength
+      queueLength,
+      audioEnabled,
+      setAudioEnabled
     }}>
       {children}
     </TTSContext.Provider>
