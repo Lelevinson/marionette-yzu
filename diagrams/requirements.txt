@@ -1,0 +1,9 @@
+# Diagram generation dependencies
+# Note: Some packages may not fully support Python 3.13 yet
+# If you encounter issues, try Python 3.11 or 3.12
+
+diagrams>=0.23.0          # System architecture diagrams
+matplotlib>=3.8.0         # Flow charts and custom diagrams
+pillow>=10.3.0            # Image manipulation
+networkx>=3.0.0           # Network/graph layouts
+

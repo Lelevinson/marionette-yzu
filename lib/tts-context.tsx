@@ -13,6 +13,8 @@ interface TTSContextValue {
   queueLength: number
   audioEnabled: boolean
   setAudioEnabled: (enabled: boolean) => void
+  isReady: boolean
+  waitUntilReady: () => Promise<void>
 }
 
 const TTSContext = createContext<TTSContextValue | null>(null)
@@ -366,6 +368,41 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [])
 
+  // Compute ready state - true when nothing is speaking or queued
+  const isReady = !isSpeaking && queueLength === 0
+
+  // Function to wait until TTS is ready - uses closure to capture CURRENT state
+  const waitUntilReady = useCallback((): Promise<void> => {
+    return new Promise<void>((resolve) => {
+      // Check current state - this gets the LATEST value from React state
+      const checkReady = () => {
+        // Access current refs/state to avoid stale closure
+        const currentlyReady = sentenceQueueRef.current.length === 0 && !isProcessingQueueRef.current
+        
+        if (currentlyReady) {
+          console.log('[TTS] Ready - queue empty and not processing')
+          resolve()
+          return true
+        }
+        return false
+      }
+      
+      // Immediate check
+      if (checkReady()) {
+        return
+      }
+      
+      console.log('[TTS] Not ready - will poll until queue clears')
+      
+      // Poll every 100ms, each time checking CURRENT ref values
+      const interval = setInterval(() => {
+        if (checkReady()) {
+          clearInterval(interval)
+        }
+      }, 100)
+    })
+  }, []) // Empty deps - refs are always current
+
   return (
     <TTSContext.Provider value={{ 
       selectedVoiceUri, 
@@ -379,7 +416,9 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
       currentSentence,
       queueLength,
       audioEnabled,
-      setAudioEnabled
+      setAudioEnabled,
+      isReady,
+      waitUntilReady
     }}>
       {children}
     </TTSContext.Provider>

@@ -19,12 +19,17 @@ NEVER use <tool_call>, NEVER use code blocks, NEVER use backticks.
 For simple requests (greetings, questions), respond directly.
 
 For action requests (navigation, automation, search):
-1. If complex (search, email), call getPlaybook to get step-by-step instructions
+1. If complex (search, email, forms), call getPlaybook to get step-by-step instructions
 2. Read the playbook, then execute EACH STEP ONE BY ONE
 3. Wait for [TOOL RESULT] after EACH tool call
 
 CRITICAL: A playbook is NOT a tool! It contains step-by-step instructions.
 After getPlaybook returns, follow the steps it provides (like "Step 1: openTab", "Step 2: findElements", etc.)
+
+ALWAYS use getPlaybook for:
+- Searching (use "google-search")
+- Sending email (use "send-email")  
+- Filling forms (use "fill-form")
 
 ## Tools
 

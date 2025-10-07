@@ -14,7 +14,7 @@ async function think(params: any) {
     
     return {
       success: true,
-      result: 'Reasoning noted. Proceed with your plan.'
+      result: 'Noted.'
     }
   } catch (error: any) {
     return { success: false, error: error.message }
@@ -33,9 +33,9 @@ export const spec: ToolSpec = {
     }
   ],
   examples: [
-    'User: "search for weather forecast" → think with reasoning: "Need google-search playbook. Steps: open Google, find search box, enter query, submit"',
-    'Complex multi-step task → think with reasoning: "User wants X. I need to: 1) Do A, 2) Do B, 3) Do C"',
-    'Ambiguous request → think with reasoning: "User might mean A or B. Based on context, I\'ll choose A because..."'
+    'User: "search for weather forecast" → <function_call>{"function": "think", "arguments": {"reasoning": "Need google-search playbook. Steps: open Google, find search box, enter query, submit"}}</function_call>',
+    'Complex task → <function_call>{"function": "think", "arguments": {"reasoning": "User wants X. Plan: 1) Do A, 2) Do B, 3) Do C"}}</function_call>',
+    'Before taking action → <function_call>{"function": "think", "arguments": {"reasoning": "Based on context, I\'ll use approach A because it best matches user intent"}}</function_call>'
   ],
   spokenLine: 'Thinking...'
 }

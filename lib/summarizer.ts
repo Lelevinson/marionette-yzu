@@ -2,7 +2,7 @@
 import type { Message } from './messages'
 
 const MAX_CONTEXT_SIZE = 9216
-const SUMMARIZATION_THRESHOLD = 0.5 // 50%
+const SUMMARIZATION_THRESHOLD = 0.8 // 80%
 
 export function shouldSummarize(currentTokens: number): boolean {
   return currentTokens >= MAX_CONTEXT_SIZE * SUMMARIZATION_THRESHOLD
@@ -67,7 +67,7 @@ export async function summarizeConversation(messages: Message[]): Promise<string
 
     // Get summary
     const summary = await summarizer.summarize(conversationText, {
-      context: 'Summarize the key points and actions taken in this conversation'
+      context: 'Summarize what the user requested, what actions were taken, what information was gathered, and what task is currently in progress or needs to be completed next'
     })
 
     // Clean up
@@ -81,5 +81,5 @@ export async function summarizeConversation(messages: Message[]): Promise<string
 }
 
 export function formatSummaryMessage(summary: string): string {
-  return `[CONTEXT SUMMARIZED - Previous conversation]\n\n${summary}`
+  return `[CONTEXT SUMMARIZED - Previous conversation]\n\n${summary}\n\n---\n\nIMPORTANT: Based on the summary above, if you were in the middle of a task or workflow, CONTINUE where you left off. If the user requested an action that hasn't been completed yet, proceed to complete it now. DO NOT wait for new instructions - act on the context provided.`
 }

@@ -5,12 +5,11 @@ import { MediaDeviceProvider } from "./lib/media-device-context"
 import { TTSProvider } from "./lib/tts-context"
 import { DebugScreen } from "./screens/debug-screen"
 import { MainScreen } from "./screens/main-screen"
+import { DEFAULT_SCREEN, type Screen } from "./lib/config"
 import "./style.css"
 
-type Screen = 'main' | 'debug'
-
 const SidePanel = () => {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('main')
+  const [currentScreen, setCurrentScreen] = useState<Screen>(DEFAULT_SCREEN)
 
   useEffect(() => {
     // Force full height

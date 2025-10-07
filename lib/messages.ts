@@ -5,6 +5,7 @@ export interface Message {
   content: string
   timestamp: number
   contextCount?: number
+  rating?: 'up' | 'down' | null
 }
 
 export function createUserMessage(content: string): Message {

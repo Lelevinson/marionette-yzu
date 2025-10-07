@@ -7,6 +7,9 @@ import { useChatContext } from "../lib/chat-context"
 import { getToolNames, TOOL_REGISTRY, getToolSpec } from "../lib/tool-registry"
 import { testEmbeddings, testSimilarity } from "../lib/transformers-test"
 import { searchVault, getVaultStats, clearVault } from "../lib/vault"
+import { useWakeWord } from "../lib/use-wake-word"
+import { useWakeWordBuiltIn } from "../lib/use-wake-word-builtin"
+import { RatingButtons } from "../components/rating-buttons"
 
 interface DebugScreenProps {
   onNavigateToMain: () => void
@@ -147,9 +150,9 @@ const ToolTester = () => {
           <div className={`text-xs font-mono ${result.success ? 'text-green-400' : 'text-red-400'}`}>
             {result.success ? 'SUCCESS' : 'ERROR'}
           </div>
-          <div className="text-xs text-gray-300 font-mono whitespace-pre-wrap mt-1 max-h-40 overflow-y-auto">
-            {result.success ? result.result : result.error}
-          </div>
+          <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap mt-1 max-h-40 overflow-y-auto">
+            <code>{result.success ? result.result : result.error}</code>
+          </pre>
         </div>
       )}
     </>
@@ -234,6 +237,58 @@ const TransformersTest = () => {
           {result.error && (
             <div className="text-xs text-red-300 font-mono mt-1">{result.error}</div>
           )}
+        </div>
+      )}
+    </>
+  )
+}
+
+const WakeWordTest = () => {
+  const { isListening, lastDetection, error, start, stop } = useWakeWordBuiltIn(() => {
+    console.log('Wake word callback triggered!')
+  })
+
+  return (
+    <>
+      <div className="flex gap-2">
+        {!isListening ? (
+          <button
+            onClick={start}
+            className="px-3 py-1 bg-purple-900 hover:bg-purple-800 rounded text-xs font-mono flex items-center gap-1"
+          >
+            <Play className="w-3 h-3" />
+            Start Wake Word
+          </button>
+        ) : (
+          <button
+            onClick={stop}
+            className="px-3 py-1 bg-red-900 hover:bg-red-800 rounded text-xs font-mono flex items-center gap-1"
+          >
+            <Square className="w-3 h-3" />
+            Stop Wake Word
+          </button>
+        )}
+      </div>
+
+      {isListening && (
+        <div className="text-xs text-purple-400 font-mono animate-pulse">
+          Listening for "Porcupine" (built-in test keyword)...
+        </div>
+      )}
+
+      {lastDetection && (
+        <div className="bg-purple-900 border border-purple-700 rounded p-2">
+          <div className="text-xs font-mono text-purple-400">
+            DETECTED: {lastDetection}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-900 border border-red-700 rounded p-2">
+          <div className="text-xs font-mono text-red-400">
+            ERROR: {error}
+          </div>
         </div>
       )}
     </>
@@ -433,7 +488,7 @@ const VaultDebugger = () => {
 }
 
 export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScreenProps) => {
-  const { state, sendMessage, resetChat, interruptChat, copyContext } = useChatContext()
+  const { state, sendMessage, resetChat, interruptChat, copyContext, rateMessage } = useChatContext()
   const [input, setInput] = useState("")
   const [copyFeedback, setCopyFeedback] = useState("")
   
@@ -478,10 +533,12 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
 
 
   const renderMessage = (message: Message) => {
-    const toolCall = parseToolCall(message.content)
-    
-    // Check if it's a tool result message
+    // Check if it's a tool result message FIRST (before parsing tool calls)
+    // Tool results may contain example tool calls from playbooks that should NOT be parsed
     const isToolResult = message.content.startsWith('[TOOL RESULT]')
+    
+    // Only parse tool calls if this is NOT a tool result
+    const toolCall = !isToolResult ? parseToolCall(message.content) : null
     
     if (toolCall) {
       const textBeforeToolCall = message.content.split('<function_call>')[0].trim()
@@ -509,6 +566,16 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
           {message.contextCount !== undefined && (
             <div className="text-gray-600 text-[10px] mt-1">
               CONTEXT: {message.contextCount}/9216 tokens
+            </div>
+          )}
+          {!state.isProcessing && !state.isInToolLoop && (
+            <div className="mt-2">
+              <RatingButtons 
+                messageId={message.id}
+                currentRating={message.rating}
+                onRate={rateMessage}
+                size="sm"
+              />
             </div>
           )}
         </div>
@@ -549,9 +616,9 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
       return (
         <div key={message.id} className="mb-2 font-mono text-xs">
           <div className="text-blue-400 mb-1">TOOL RESULT</div>
-          <div className="bg-blue-950 p-2 rounded border border-blue-800 text-blue-200 whitespace-pre-wrap text-[10px] max-h-40 overflow-y-auto">
-            {resultContent}
-          </div>
+          <pre className="bg-blue-950 p-2 rounded border border-blue-800 text-blue-200 whitespace-pre-wrap text-[10px] max-h-40 overflow-y-auto">
+            <code>{resultContent}</code>
+          </pre>
         </div>
       )
     }
@@ -563,6 +630,16 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
         {message.role === 'assistant' && message.contextCount !== undefined && (
           <div className="text-gray-600 text-[10px] mt-1">
             CONTEXT: {message.contextCount}/9216 tokens
+          </div>
+        )}
+        {message.role === 'assistant' && !state.isProcessing && !state.isInToolLoop && (
+          <div className="mt-2">
+            <RatingButtons 
+              messageId={message.id}
+              currentRating={message.rating}
+              onRate={rateMessage}
+              size="sm"
+            />
           </div>
         )}
       </div>
@@ -616,6 +693,11 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
       {/* Tool Tester */}
       <CollapsibleSection title="MANUAL_TOOL_TEST">
         <ToolTester />
+      </CollapsibleSection>
+
+      {/* Wake Word Test */}
+      <CollapsibleSection title="WAKE WORD TEST">
+        <WakeWordTest />
       </CollapsibleSection>
 
       {/* Transformers.js Test */}

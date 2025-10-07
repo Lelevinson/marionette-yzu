@@ -7,6 +7,7 @@ import { executeUITool, validateUITools } from './ui-tools'
 import { getToolSpec } from './tool-registry'
 import { isAIModelError, isWriterAPIError } from './errors'
 import { type AlertAction, openAIFlagsPage, openWriterAPIFlagsPage } from './alert-context'
+import { useTTS } from './tts-context'
 
 // Validate UI tools on module load
 validateUITools()
@@ -24,16 +25,20 @@ interface ChatState {
   isWaitingForFirstChunk: boolean
   isSummarizing: boolean
   executingTool: string | null
+  isInToolLoop: boolean
 }
 
 type ChatAction =
   | { type: 'ADD_MESSAGE'; payload: Message }
   | { type: 'UPDATE_MESSAGE'; payload: { id: string; content: string } }
   | { type: 'UPDATE_MESSAGE_CONTEXT'; payload: { id: string; contextCount: number } }
+  | { type: 'UPDATE_MESSAGE_RATING'; payload: { id: string; rating: 'up' | 'down' } }
   | { type: 'SET_PROCESSING'; payload: boolean }
   | { type: 'SET_WAITING'; payload: boolean }
   | { type: 'SET_SUMMARIZING'; payload: boolean }
   | { type: 'SET_EXECUTING_TOOL'; payload: string | null }
+  | { type: 'SET_IN_TOOL_LOOP'; payload: boolean }
+  | { type: 'APPLY_SUMMARY'; payload: { summaryMessage: Message } }
   | { type: 'RESET' }
 
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
@@ -61,7 +66,18 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
         )
       }
     
+    case 'UPDATE_MESSAGE_RATING':
+      return {
+        ...state,
+        messages: state.messages.map(msg =>
+          msg.id === action.payload.id
+            ? { ...msg, rating: action.payload.rating }
+            : msg
+        )
+      }
+    
     case 'SET_PROCESSING':
+      console.log('[STOPBTN-REDUCER] SET_PROCESSING:', action.payload)
       return { ...state, isProcessing: action.payload }
     
     case 'SET_WAITING':
@@ -73,8 +89,20 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     case 'SET_EXECUTING_TOOL':
       return { ...state, executingTool: action.payload }
     
+    case 'SET_IN_TOOL_LOOP':
+      console.log('[STOPBTN-REDUCER] SET_IN_TOOL_LOOP:', action.payload)
+      return { ...state, isInToolLoop: action.payload }
+    
+    case 'APPLY_SUMMARY':
+      // Replace messages with a single summary message but PRESERVE processing flags
+      return {
+        ...state,
+        messages: [action.payload.summaryMessage]
+      }
+    
     case 'RESET':
-      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false, executingTool: null }
+      console.log('[STOPBTN-REDUCER] RESET - clearing all state')
+      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false, executingTool: null, isInToolLoop: false }
     
     default:
       return state
@@ -88,6 +116,7 @@ interface ChatContextValue {
   resetChat: () => void
   interruptChat: () => void
   copyContext: () => Promise<string>
+  rateMessage: (messageId: string, rating: 'up' | 'down') => void
   isInitialLoadComplete: boolean
 }
 
@@ -99,8 +128,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     isProcessing: false,
     isWaitingForFirstChunk: false,
     isSummarizing: false,
-    executingTool: null
+    executingTool: null,
+    isInToolLoop: false
   })
+
+  // Get TTS context to wait for readiness before tool execution
+  const { waitUntilReady: waitForTTS } = useTTS()
 
   // Track if we need to rebuild AI context from restored messages
   const [needsContextRebuild, setNeedsContextRebuild] = React.useState(false)
@@ -110,6 +143,15 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   
   // Track if we're currently syncing to avoid loops
   const isSyncingRef = React.useRef(false)
+  // Track processing state in refs so storage listener has current values
+  const isProcessingRef = React.useRef(false)
+  const isInToolLoopRef = React.useRef(false)
+
+  // Keep refs in sync with state
+  React.useEffect(() => {
+    isProcessingRef.current = state.isProcessing
+    isInToolLoopRef.current = state.isInToolLoop
+  }, [state.isProcessing, state.isInToolLoop])
 
   // Restore messages on mount
   React.useEffect(() => {
@@ -131,6 +173,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       if (areaName !== 'local') return
       if (!changes.chat_messages) return
       if (isSyncingRef.current) return
+
+      // CRITICAL: Never sync during active workflows - it clears isProcessing/isInToolLoop!
+      // Only sync when idle (not processing and not in tool loop)
+      if (isProcessingRef.current || isInToolLoopRef.current) {
+        console.log('[STOPBTN] Ignoring storage sync - workflow in progress (isProcessing=' + isProcessingRef.current + ', isInToolLoop=' + isInToolLoopRef.current + ')')
+        return
+      }
 
       const newMessages = changes.chat_messages.newValue
 
@@ -177,7 +226,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }, 100)
   }, [state.messages])
 
-  const checkAndSummarize = async () => {
+  const checkAndSummarize = async (): Promise<boolean> => {
     const tokenUsage = getTokenUsage()
     
     if (shouldSummarize(tokenUsage.usage)) {
@@ -191,12 +240,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         // Reset session
         destroyAISession()
         
-        // Clear messages and add summary
-        dispatch({ type: 'RESET' })
+        // Replace messages with summary but KEEP processing flags and tool loop state
         const summaryMessage = createAssistantMessage(formatSummaryMessage(summary), 0)
-        dispatch({ type: 'ADD_MESSAGE', payload: summaryMessage })
+        dispatch({ type: 'APPLY_SUMMARY', payload: { summaryMessage } })
         
-        console.log('Conversation summarized and reset')
+        console.log('Conversation summarized and preserved processing state')
+        return true // Indicate that summarization occurred
       } catch (error: any) {
         console.error('Summarization failed:', error)
         const errorMsg = createAssistantMessage(`Failed to summarize: ${error.message}`, 0)
@@ -205,6 +254,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         dispatch({ type: 'SET_SUMMARIZING', payload: false })
       }
     }
+    
+    return false // No summarization occurred
   }
 
   const sendMessage = async (userInput: string) => {
@@ -212,9 +263,10 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     const hasUserActivation = (navigator as any).userActivation?.isActive
     console.log('sendMessage called - User activation at start:', hasUserActivation)
     
-    console.log('[PROCESSING] Setting to TRUE')
+    console.log('[STOPBTN] ========== SETTING TO TRUE ==========')
     dispatch({ type: 'SET_PROCESSING', payload: true })
     dispatch({ type: 'SET_WAITING', payload: true })
+    console.log('[STOPBTN] isProcessing=true, isWaitingForFirstChunk=true')
     
     // If we restored messages and haven't rebuilt context yet, prepend conversation history BEFORE adding new message
     let messageToSend = userInput
@@ -283,7 +335,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: assistantMessageId, contextCount } })
       
       // Check if summarization is needed before tool loop
-      await checkAndSummarize()
+      const summarizedBefore = await checkAndSummarize()
       
       // Tool execution loop
       console.log('[PROCESSING] Entering tool execution loop')
@@ -293,6 +345,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       
       // Track recent tool calls to detect infinite loops
       const recentToolCalls: Array<{name: string, args: string}> = []
+      
+      // Set flag to indicate we're in tool loop
+      console.log('[STOPBTN] ========== ENTERING TOOL LOOP ==========')
+      dispatch({ type: 'SET_IN_TOOL_LOOP', payload: true })
+      console.log('[STOPBTN] isInToolLoop=true, isProcessing=true (should remain true)')
       
       while (loopCount < MAX_LOOPS) {
         console.log(`[PROCESSING] Loop ${loopCount + 1} - Checking for tool calls...`)
@@ -315,37 +372,69 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         
         console.log(`[PROCESSING] Loop ${loopCount + 1} - Tool call found:`, toolCall.function)
         
-        // Detect infinite loops - same tool called 3+ times consecutively
-        recentToolCalls.push({ name: toolCall.function, args: JSON.stringify(toolCall.arguments) })
-        
-        // Keep only last 5 tool calls
-        if (recentToolCalls.length > 5) {
-          recentToolCalls.shift()
-        }
-        
-        // Check for loop: last 3 calls are the same tool
-        if (recentToolCalls.length >= 3) {
-          const lastThree = recentToolCalls.slice(-3)
-          const allSameTool = lastThree.every(call => call.name === lastThree[0].name)
+        // Detect infinite loops - same tool called 3+ times consecutively OR cyclic patterns
+        // EXCLUDE certain tools from loop detection:
+        // - 'think' is just internal reasoning
+        // - 'fillInput' is expected to be called multiple times when filling forms
+        // - 'scrollDown'/'scrollUp' may be called many times on long pages
+        const excludedTools = ['think', 'fillInput', 'scrollDown', 'scrollUp']
+        if (!excludedTools.includes(toolCall.function)) {
+          recentToolCalls.push({ name: toolCall.function, args: JSON.stringify(toolCall.arguments) })
           
-          if (allSameTool) {
-            const toolName = lastThree[0].name
-            console.error(`[PROCESSING] INFINITE LOOP DETECTED: ${toolName} called 3 times consecutively`)
+          // Keep only last 9 tool calls (to detect patterns up to 3 cycles of 3 tools)
+          if (recentToolCalls.length > 9) {
+            recentToolCalls.shift()
+          }
+          
+          // Check for loop: last 3 calls are the same tool
+          if (recentToolCalls.length >= 3) {
+            const lastThree = recentToolCalls.slice(-3)
+            const allSameTool = lastThree.every(call => call.name === lastThree[0].name)
             
-            const loopMessage = createAssistantMessage(
-              `⚠️ LOOP DETECTED: You've called ${toolName} three times in a row. ` +
-              `Stop calling tools and provide your final answer based on the information you already have. ` +
-              `Describe what you see or learned from the previous tool results.`,
-              0
-            )
-            dispatch({ type: 'ADD_MESSAGE', payload: { ...loopMessage, id: Date.now() + '_loopdetected' } })
-            break
+            if (allSameTool) {
+              const toolName = lastThree[0].name
+              console.error(`[PROCESSING] INFINITE LOOP DETECTED: ${toolName} called 3 times consecutively`)
+              
+              const loopMessage = createAssistantMessage(
+                `LOOP DETECTED: You've called ${toolName} three times in a row. ` +
+                `Stop calling tools and provide your final answer based on the information you already have. ` +
+                `Describe what you see or learned from the previous tool results.`,
+                0
+              )
+              dispatch({ type: 'ADD_MESSAGE', payload: { ...loopMessage, id: Date.now() + '_loopdetected' } })
+              break
+            }
+          }
+          
+          // Check for cyclic patterns: same sequence of tools repeated
+          if (recentToolCalls.length >= 6) {
+            const last6 = recentToolCalls.slice(-6)
+            const pattern1 = last6.slice(0, 3).map(c => c.name).join(',')
+            const pattern2 = last6.slice(3, 6).map(c => c.name).join(',')
+            
+            if (pattern1 === pattern2) {
+              console.error(`[PROCESSING] CYCLIC LOOP DETECTED: Pattern [${pattern1}] repeated`)
+              
+              const loopMessage = createAssistantMessage(
+                `LOOP DETECTED: You're repeating the same sequence of tools (${pattern1}) without making progress. ` +
+                `You have already gathered the information you need. ` +
+                `Now ASK THE USER for the information needed to fill the form fields, or provide your final answer based on what you've learned.`,
+                0
+              )
+              dispatch({ type: 'ADD_MESSAGE', payload: { ...loopMessage, id: Date.now() + '_cycledetected' } })
+              break
+            }
           }
         }
         
         // Show which tool is executing
         console.log('[PROCESSING] Setting executingTool to:', toolCall.function)
         dispatch({ type: 'SET_EXECUTING_TOOL', payload: toolCall.function })
+        
+        // Wait for TTS queue to clear before executing tool
+        console.log('[TOOL] Waiting for TTS to finish before executing tool...')
+        await waitForTTS()
+        console.log('[TOOL] TTS finished, executing tool now')
         
         // Check if tool requires user gesture
         const toolSpec = getToolSpec(toolCall.function)
@@ -381,12 +470,16 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         let followupContent = ""
         const followupMessageId = Date.now() + '_followup_' + loopCount
         
-        console.log(`[PROCESSING] Streaming loopback response ${loopCount + 1}...`)
-        const followupContextCount = await streamResponse(messageToSend, (chunk: string) => {
+        console.log(`[STOPBTN] ========== LOOPBACK ${loopCount + 1} START ==========`)
+        console.log(`[STOPBTN] isProcessing=true, isInToolLoop=true (STOP button should be visible)`)
+        console.log(`[STOPBTN] About to call streamResponse...`)
+        // IMPORTANT: Use a continuation prompt so the agent knows to keep executing
+        const continuationPrompt = 'Continue executing the workflow based on the last tool result. Do not conclude. If the playbook has more steps, perform the next step.'
+        const followupContextCount = await streamResponse(continuationPrompt, (chunk: string) => {
           followupContent += chunk
           
           if (followupContent.length === chunk.length) {
-            console.log(`[PROCESSING] Loopback ${loopCount + 1} first chunk received`)
+            console.log(`[STOPBTN] Loopback ${loopCount + 1} FIRST CHUNK received`)
             const followupMessage = createAssistantMessage(followupContent, 0)
             dispatch({ type: 'ADD_MESSAGE', payload: { ...followupMessage, id: followupMessageId } })
           } else {
@@ -394,14 +487,41 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           }
         }, resultToPass)
         
-        console.log(`[PROCESSING] Loopback ${loopCount + 1} complete, content length:`, followupContent.length)
+        console.log(`[STOPBTN] ========== LOOPBACK ${loopCount + 1} STREAM COMPLETE ==========`)
+        console.log(`[STOPBTN] Stream finished, content length:`, followupContent.length)
         
         dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: followupMessageId, contextCount: followupContextCount } })
         
         // Check if summarization is needed during tool loop
-        await checkAndSummarize()
+        const summarizedDuringLoop = await checkAndSummarize()
         
-        currentContent = followupContent
+        // If summarization occurred during loopback, continue the workflow
+        if (summarizedDuringLoop) {
+          console.log('[PROCESSING] Summarization occurred mid-loopback, prompting agent to continue workflow...')
+          
+          // Get agent's response to continue after summarization
+          let continueContent = ""
+          const continueMessageId = Date.now() + '_continue_' + loopCount
+          
+          const continuePrompt = "Please continue with your workflow based on the context summary above."
+          const continueContextCount = await streamResponse(continuePrompt, (chunk: string) => {
+            continueContent += chunk
+            
+            if (continueContent.length === chunk.length) {
+              console.log('[PROCESSING] Continue after summarization - first chunk received')
+              const continueMessage = createAssistantMessage(continueContent, 0)
+              dispatch({ type: 'ADD_MESSAGE', payload: { ...continueMessage, id: continueMessageId } })
+            } else {
+              dispatch({ type: 'UPDATE_MESSAGE', payload: { id: continueMessageId, content: continueContent } })
+            }
+          })
+          
+          dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: continueMessageId, contextCount: continueContextCount } })
+          currentContent = continueContent
+        } else {
+          currentContent = followupContent
+        }
+        
         loopCount++
         console.log(`[PROCESSING] Loop ${loopCount} complete, checking for next tool call...`)
       }
@@ -410,9 +530,17 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         console.warn('[PROCESSING] Reached max tool execution loops')
       }
       
-      console.log('[PROCESSING] Tool loop exited after', loopCount, 'iterations')
+      console.log('[STOPBTN] ========== EXITING TOOL LOOP after', loopCount, 'iterations ==========')
+      
+      // Clear the tool loop flag - workflow is complete
+      dispatch({ type: 'SET_IN_TOOL_LOOP', payload: false })
+      console.log('[STOPBTN] isInToolLoop=false, isProcessing=true (workflow complete, about to finish)')
       
     } catch (error: any) {
+      // Clear tool loop flag on error too
+      console.log('[STOPBTN] ========== EXCEPTION IN TOOL LOOP ==========')
+      console.log('[STOPBTN] Error:', error.name, error.message)
+      dispatch({ type: 'SET_IN_TOOL_LOOP', payload: false })
       dispatch({ type: 'SET_WAITING', payload: false })
       const currentContextCount = getTokenUsage().usage
       
@@ -443,12 +571,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             })
         }
       }
-      console.log('[PROCESSING] Setting to FALSE (error path)')
+      console.log('[STOPBTN] ========== ERROR PATH - SETTING TO FALSE ==========')
+      console.log('[STOPBTN] Error:', error)
       dispatch({ type: 'SET_PROCESSING', payload: false })
       return
     }
     
-    console.log('[PROCESSING] Setting to FALSE (completion path)')
+    console.log('[STOPBTN] ========== COMPLETION PATH - SETTING TO FALSE ==========')
+    console.log('[STOPBTN] Workflow complete, now safe to set isProcessing=false')
     dispatch({ type: 'SET_PROCESSING', payload: false })
   }
 
@@ -461,9 +591,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const interruptChat = () => {
+    console.log('[STOPBTN] ========== INTERRUPT CALLED ==========')
+    console.log('[STOPBTN] User clicked STOP button')
     interruptAI()
     dispatch({ type: 'SET_PROCESSING', payload: false })
     dispatch({ type: 'SET_WAITING', payload: false })
+    dispatch({ type: 'SET_IN_TOOL_LOOP', payload: false })
   }
 
   const copyContext = async (): Promise<string> => {
@@ -510,8 +643,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     return contextText
   }
 
+  const rateMessage = (messageId: string, rating: 'up' | 'down') => {
+    dispatch({ type: 'UPDATE_MESSAGE_RATING', payload: { id: messageId, rating } })
+  }
+
   return (
-    <ChatContext.Provider value={{ state, dispatch, sendMessage, resetChat, interruptChat, copyContext, isInitialLoadComplete }}>
+    <ChatContext.Provider value={{ state, dispatch, sendMessage, resetChat, interruptChat, copyContext, rateMessage, isInitialLoadComplete }}>
       {children}
     </ChatContext.Provider>
   )

@@ -7,6 +7,7 @@ import { openPermissionsPage, openAIFlagsPage } from "../lib/alert-context"
 import { MicSelector } from "../components/mic-selector"
 import { VoiceSelector } from "../components/voice-selector"
 import { Waveform } from "../components/waveform"
+import { RatingButtons } from "../components/rating-buttons"
 import { parseToolCall } from "../lib/tools"
 import { getSpokenLine } from "../lib/tool-registry"
 
@@ -33,7 +34,7 @@ const getCompleteSentences = (text: string): string => {
 
 export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreenProps) => {
   const { isListening, transcript, handleMicClick } = useVoiceInput()
-  const { state, sendMessage, resetChat, isInitialLoadComplete } = useChatContext()
+  const { state, sendMessage, resetChat, rateMessage, isInitialLoadComplete } = useChatContext()
   const { handleNewText, stop, currentSentence, isSpeaking, audioEnabled, setAudioEnabled } = useTTS()
   const [textInput, setTextInput] = useState("")
   
@@ -78,14 +79,21 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
         const textBeforeToolCall = msg.content.split('<function_call>')[0].trim()
         
         return {
+          id: msg.id,
           text: getCompleteSentences(textBeforeToolCall || msg.content),
           toolCall: toolCall,
-          spokenLine: toolCall ? getSpokenLine(toolCall.function, toolCall.arguments) : null
+          spokenLine: toolCall ? getSpokenLine(toolCall.function, toolCall.arguments) : null,
+          rating: msg.rating
         }
       }
     }
-    return { text: '', toolCall: null, spokenLine: null }
+    return { id: '', text: '', toolCall: null, spokenLine: null, rating: null }
   }, [state.messages])
+
+  // Track if we're currently speaking a tool's spokenLine
+  const isSpeakingToolAction = useMemo(() => {
+    return isSpeaking && latestResponse.spokenLine && currentSentence === latestResponse.spokenLine
+  }, [isSpeaking, latestResponse.spokenLine, currentSentence])
 
   // Display only current sentence being spoken
   const displayText = currentSentence
@@ -111,6 +119,8 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
   // Determine waveform state - pure event-driven, no complex conditions
   const waveformState = isListening 
     ? 'listening' 
+    : isSpeakingToolAction
+    ? 'tool'
     : state.executingTool
     ? 'tool'
     : state.isProcessing
@@ -255,7 +265,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
           </div>
         )}
 
-        {transcript && !latestResponse.spokenLine && (
+        {transcript && !isSpeakingToolAction && (
           <div className="mt-4 max-w-md text-sm text-gray-400 text-center">
             {transcript}
           </div>
@@ -263,9 +273,21 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
 
         {displayText && (
           <div className="mt-4 max-w-md text-center">
-            <div className="text-sm text-gray-200">
+            <div className={`text-sm ${isSpeakingToolAction ? 'text-purple-400 font-medium' : 'text-gray-200'}`}>
               {displayText}
             </div>
+          </div>
+        )}
+        
+        {/* Rating buttons - show only when response is complete */}
+        {!state.isProcessing && !state.isInToolLoop && latestResponse.text && latestResponse.id && (
+          <div className="mt-4 flex items-center justify-center">
+            <RatingButtons 
+              messageId={latestResponse.id}
+              currentRating={latestResponse.rating}
+              onRate={rateMessage}
+              size="md"
+            />
           </div>
         )}
       </div>
