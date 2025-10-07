@@ -1,5 +1,5 @@
 import type { PlasmoMessaging } from "@plasmohq/messaging"
-import type { ToolSpec } from '../../lib/tool-registry'
+import type { ToolSpec } from '../tool-registry'
 
 const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
   try {

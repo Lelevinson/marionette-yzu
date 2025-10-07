@@ -1,26 +1,27 @@
 // Tool Registry - Aggregates tool specs from individual tool modules
-import { spec as captureScreenshotSpec } from '../background/messages/captureScreenshot'
-import { spec as getPageTitleSpec } from '../background/messages/getPageTitle'
-import { spec as openTabSpec } from '../background/messages/openTab'
-import { spec as getAccessibilitySnapshotSpec } from '../background/messages/getAccessibilitySnapshot'
-import { spec as clickElementSpec } from '../background/messages/clickElement'
-import { spec as fillInputSpec } from '../background/messages/fillInput'
-import { spec as findElementsSpec } from '../background/messages/findElements'
-import { spec as listenSpec } from '../background/messages/listen'
-import { spec as writeContentSpec } from '../background/messages/writeContent'
-import { spec as storeMemorySpec } from '../background/messages/storeMemory'
-import { spec as getMemoriesSpec } from '../background/messages/getMemories'
-import { spec as translateTextSpec } from '../background/messages/translateText'
-import { spec as detectLanguageSpec } from '../background/messages/detectLanguage'
-import { spec as scrollUpSpec } from '../background/messages/scrollUp'
-import { spec as scrollDownSpec } from '../background/messages/scrollDown'
-import { spec as highlightSelectorSpec } from '../background/messages/highlightSelector'
-import { spec as highlightTextSpec } from '../background/messages/highlightText'
-import { spec as captureCurrentPageSpec } from '../background/messages/captureCurrentPage'
-import { spec as searchVaultSpec } from '../background/messages/searchVault'
-import { spec as getVaultStatsSpec } from '../background/messages/getVaultStats'
-import { spec as getPlaybookSpec } from '../background/messages/getPlaybook'
-import { spec as thinkSpec } from '../background/messages/think'
+import { spec as captureScreenshotSpec } from './tools/captureScreenshot'
+import { spec as getPageTitleSpec } from './tools/getPageTitle'
+import { spec as openTabSpec } from './tools/openTab'
+import { spec as getAccessibilitySnapshotSpec } from './tools/getAccessibilitySnapshot'
+import { spec as clickElementSpec } from './tools/clickElement'
+import { spec as fillInputSpec } from './tools/fillInput'
+import { spec as findElementsSpec } from './tools/findElements'
+import { spec as listenSpec } from './tools/listen'
+import { spec as writeContentSpec } from './tools/writeContent'
+import { spec as storeMemorySpec } from './tools/storeMemory'
+import { spec as getMemoriesSpec } from './tools/getMemories'
+import { spec as translateTextSpec } from './tools/translateText'
+import { spec as detectLanguageSpec } from './tools/detectLanguage'
+import { spec as scrollUpSpec } from './tools/scrollUp'
+import { spec as scrollDownSpec } from './tools/scrollDown'
+import { spec as highlightSelectorSpec } from './tools/highlightSelector'
+import { spec as highlightTextSpec } from './tools/highlightText'
+import { spec as captureCurrentPageSpec } from './tools/captureCurrentPage'
+import { spec as searchVaultSpec } from './tools/searchVault'
+import { spec as getVaultStatsSpec } from './tools/getVaultStats'
+import { spec as getPlaybookSpec } from './tools/getPlaybook'
+import { spec as thinkSpec } from './tools/think'
+import { spec as summarizePageSpec } from './tools/summarizePage'
 
 export interface ToolParameter {
   name: string
@@ -50,6 +51,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
   fillInputSpec,
   listenSpec,
   writeContentSpec,
+  summarizePageSpec,
   storeMemorySpec,
   getMemoriesSpec,
   translateTextSpec,

@@ -1,5 +1,5 @@
 // highlightText tool - Highlight text content on the page
-import type { ToolSpec } from '../../lib/tool-registry'
+import type { ToolSpec } from '../tool-registry'
 
 async function highlightText(params: any) {
   try {

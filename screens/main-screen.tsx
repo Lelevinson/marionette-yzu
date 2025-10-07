@@ -4,6 +4,9 @@ import { useVoiceInput } from "../lib/use-voice-input"
 import { useChatContext } from "../lib/chat-context"
 import { useTTS } from "../lib/tts-context"
 import { openPermissionsPage, openAIFlagsPage } from "../lib/alert-context"
+import { useOnboarding } from "../components/onboarding/onboarding-provider"
+import { OnboardingFlow } from "../components/onboarding/onboarding-flow"
+import { OnboardingRedirect } from "../components/onboarding/onboarding-redirect"
 import { MicSelector } from "../components/mic-selector"
 import { VoiceSelector } from "../components/voice-selector"
 import { Waveform } from "../components/waveform"
@@ -33,6 +36,7 @@ const getCompleteSentences = (text: string): string => {
 }
 
 export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreenProps) => {
+  const { state: onboardingState, isPopup } = useOnboarding()
   const { isListening, transcript, handleMicClick } = useVoiceInput()
   const { state, sendMessage, resetChat, rateMessage, isInitialLoadComplete } = useChatContext()
   const { handleNewText, stop, currentSentence, isSpeaking, audioEnabled, setAudioEnabled } = useTTS()
@@ -149,12 +153,22 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
     }
   }
 
+  // Show redirect screen in popup when onboarding is needed
+  if (isPopup && !onboardingState.isComplete && onboardingState.currentStep) {
+    return <OnboardingRedirect />
+  }
+
   return (
-    <div 
-      className="w-full bg-black text-white flex flex-col" 
-      style={fullHeight ? { height: '100vh' } : { minHeight: '500px', maxHeight: '600px' }}
-    >
-      {/* Header */}
+    <>
+      {/* Show onboarding flow in side panel if not complete */}
+      <OnboardingFlow />
+      
+      {/* Main app - hidden when onboarding is active */}
+      <div 
+        className="w-full bg-black text-white flex flex-col" 
+        style={fullHeight ? { height: '100vh' } : { minHeight: '500px', maxHeight: '600px' }}
+      >
+        {/* Header */}
       <div className="p-3 border-b border-gray-800 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="font-mono text-sm">MARIONETTE</div>
@@ -281,7 +295,8 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
         
         {/* Rating buttons - show only when response is complete */}
         {!state.isProcessing && !state.isInToolLoop && latestResponse.text && latestResponse.id && (
-          <div className="mt-4 flex items-center justify-center">
+          <div className="mt-4 flex flex-col items-center justify-center gap-1">
+            <div className="text-[10px] text-gray-500 font-mono">rate last response</div>
             <RatingButtons 
               messageId={latestResponse.id}
               currentRating={latestResponse.rating}
@@ -312,6 +327,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
           className="w-full bg-transparent border-none text-sm font-mono text-gray-300 placeholder-gray-600 focus:outline-none disabled:opacity-50 text-center"
         />
       </div>
-    </div>
+      </div>
+    </>
   )
 }

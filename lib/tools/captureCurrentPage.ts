@@ -1,6 +1,6 @@
 // captureCurrentPage tool - Capture current page to vault
-import type { ToolSpec } from '../../lib/tool-registry'
-import { storePageInVault } from '../../lib/vault'
+import type { ToolSpec } from '../tool-registry'
+import { storePageInVault } from '../vault'
 
 async function captureCurrentPage(params: any) {
   try {

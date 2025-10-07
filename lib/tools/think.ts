@@ -1,5 +1,5 @@
 // think tool - Allow agent to explicitly reason before taking action
-import type { ToolSpec } from '../../lib/tool-registry'
+import type { ToolSpec } from '../tool-registry'
 
 async function think(params: any) {
   try {
@@ -14,7 +14,7 @@ async function think(params: any) {
     
     return {
       success: true,
-      result: 'Noted.'
+      result: 'Your reasoning is noted. Now execute the next action based on your plan. Do NOT call think again - proceed directly with the required tool call or response to the user.'
     }
   } catch (error: any) {
     return { success: false, error: error.message }

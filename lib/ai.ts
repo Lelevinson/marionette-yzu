@@ -1,6 +1,6 @@
 // Simple AI module
 import { TOOL_REGISTRY } from './tool-registry'
-import { getSystemPrompt } from './system-prompt'
+import { getSystemPrompt } from './prompts/system-prompt'
 
 let aiSession: any = null
 let currentController: AbortController | null = null

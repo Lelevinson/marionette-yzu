@@ -7,9 +7,9 @@ import { useChatContext } from "../lib/chat-context"
 import { getToolNames, TOOL_REGISTRY, getToolSpec } from "../lib/tool-registry"
 import { testEmbeddings, testSimilarity } from "../lib/transformers-test"
 import { searchVault, getVaultStats, clearVault } from "../lib/vault"
-import { useWakeWord } from "../lib/use-wake-word"
 import { useWakeWordBuiltIn } from "../lib/use-wake-word-builtin"
 import { RatingButtons } from "../components/rating-buttons"
+import { useOnboarding } from "../components/onboarding/onboarding-provider"
 
 interface DebugScreenProps {
   onNavigateToMain: () => void
@@ -291,6 +291,36 @@ const WakeWordTest = () => {
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+const OnboardingControls = () => {
+  const { state, resetOnboarding } = useOnboarding()
+
+  return (
+    <>
+      <div className="space-y-2">
+        <div className="bg-gray-900 border border-gray-700 rounded p-2 text-[10px] font-mono">
+          <div className="text-gray-300">
+            <div>Status: {state.isComplete ? '✓ Complete' : '⚠ Not Complete'}</div>
+            <div>Microphone: {state.micPermissionGranted ? '✓ Granted' : '✗ Not Granted'}</div>
+            <div>AI Model: {state.modelAvailable ? '✓ Available' : '✗ Unavailable'}</div>
+            <div>Speech Recognition: {state.speechRecognitionAvailable ? '✓ Available' : '✗ Unavailable'}</div>
+            {state.currentStep && (
+              <div className="text-purple-400 mt-1">Current Step: {state.currentStep}</div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={resetOnboarding}
+          className="w-full px-3 py-2 bg-purple-900 hover:bg-purple-800 rounded text-xs font-mono flex items-center justify-center gap-2"
+        >
+          <RotateCcw className="w-3 h-3" />
+          Reset Onboarding
+        </button>
+      </div>
     </>
   )
 }
@@ -689,6 +719,11 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
           </button>
         </div>
       </div>
+
+      {/* Onboarding Controls */}
+      <CollapsibleSection title="ONBOARDING">
+        <OnboardingControls />
+      </CollapsibleSection>
 
       {/* Tool Tester */}
       <CollapsibleSection title="MANUAL_TOOL_TEST">

@@ -1,4 +1,4 @@
-import type { ToolSpec } from '../../lib/tool-registry'
+import type { ToolSpec } from '../tool-registry'
 
 async function getPageTitle(params: any) {
   try {

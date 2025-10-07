@@ -1,6 +1,6 @@
 // getVaultStats tool - Get statistics about the vault
-import type { ToolSpec } from '../../lib/tool-registry'
-import { getVaultStats as getStats } from '../../lib/vault'
+import type { ToolSpec } from '../tool-registry'
+import { getVaultStats as getStats } from '../vault'
 
 async function getVaultStats(params: any) {
   try {

@@ -1,22 +1,23 @@
-import think from './background/messages/think'
-import getPageTitle from './background/messages/getPageTitle'
-import openTab from './background/messages/openTab'
-import captureScreenshot from './background/messages/captureScreenshot'
-import getAccessibilitySnapshot from './background/messages/getAccessibilitySnapshot'
-import findElements from './background/messages/findElements'
-import clickElement from './background/messages/clickElement'
-import fillInput from './background/messages/fillInput'
-import listenHandler from './background/messages/listen'
-import storeMemory from './background/messages/storeMemory'
-import getMemories from './background/messages/getMemories'
-import scrollUp from './background/messages/scrollUp'
-import scrollDown from './background/messages/scrollDown'
-import highlightSelector from './background/messages/highlightSelector'
-import highlightText from './background/messages/highlightText'
-import captureCurrentPage from './background/messages/captureCurrentPage'
-import searchVault from './background/messages/searchVault'
-import getVaultStats from './background/messages/getVaultStats'
-import getPlaybook from './background/messages/getPlaybook'
+import think from './lib/tools/think'
+import getPageTitle from './lib/tools/getPageTitle'
+import openTab from './lib/tools/openTab'
+import captureScreenshot from './lib/tools/captureScreenshot'
+import getAccessibilitySnapshot from './lib/tools/getAccessibilitySnapshot'
+import findElements from './lib/tools/findElements'
+import clickElement from './lib/tools/clickElement'
+import fillInput from './lib/tools/fillInput'
+import listenHandler from './lib/tools/listen'
+import storeMemory from './lib/tools/storeMemory'
+import getMemories from './lib/tools/getMemories'
+import scrollUp from './lib/tools/scrollUp'
+import scrollDown from './lib/tools/scrollDown'
+import highlightSelector from './lib/tools/highlightSelector'
+import highlightText from './lib/tools/highlightText'
+import captureCurrentPage from './lib/tools/captureCurrentPage'
+import searchVault from './lib/tools/searchVault'
+import getVaultStats from './lib/tools/getVaultStats'
+import getPlaybook from './lib/tools/getPlaybook'
+import summarizePageHandler from './lib/tools/summarizePage'
 import { isValidTool } from './lib/tool-registry'
 import { autoCapturePage } from './lib/auto-capture'
 
@@ -62,7 +63,8 @@ const toolHandlers: Record<string, ToolHandler> = {
   captureCurrentPage,
   searchVault,
   getVaultStats,
-  getPlaybook
+  getPlaybook,
+  summarizePage: plasmoWrapper(summarizePageHandler)
 }
 
 chrome.runtime.onInstalled.addListener(() => {

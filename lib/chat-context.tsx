@@ -39,6 +39,7 @@ type ChatAction =
   | { type: 'SET_EXECUTING_TOOL'; payload: string | null }
   | { type: 'SET_IN_TOOL_LOOP'; payload: boolean }
   | { type: 'APPLY_SUMMARY'; payload: { summaryMessage: Message } }
+  | { type: 'MARK_MESSAGES_VISUAL_ONLY' }
   | { type: 'RESET' }
 
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
@@ -93,11 +94,18 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
       console.log('[STOPBTN-REDUCER] SET_IN_TOOL_LOOP:', action.payload)
       return { ...state, isInToolLoop: action.payload }
     
-    case 'APPLY_SUMMARY':
-      // Replace messages with a single summary message but PRESERVE processing flags
+    case 'MARK_MESSAGES_VISUAL_ONLY':
+      // Mark all existing messages as visual only (keep in UI but exclude from AI context)
       return {
         ...state,
-        messages: [action.payload.summaryMessage]
+        messages: state.messages.map(msg => ({ ...msg, visualOnly: true }))
+      }
+    
+    case 'APPLY_SUMMARY':
+      // Add summary message after marking old messages as visual only
+      return {
+        ...state,
+        messages: [...state.messages, action.payload.summaryMessage]
       }
     
     case 'RESET':
@@ -234,17 +242,21 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_SUMMARIZING', payload: true })
       
       try {
-        // Summarize current conversation
-        const summary = await summarizeConversation(state.messages)
+        // Summarize current conversation (only non-visual messages)
+        const messagesForSummary = state.messages.filter(msg => !msg.visualOnly)
+        const summary = await summarizeConversation(messagesForSummary)
         
         // Reset session
         destroyAISession()
         
-        // Replace messages with summary but KEEP processing flags and tool loop state
+        // Mark all current messages as visual only (keep in UI but not sent to AI)
+        dispatch({ type: 'MARK_MESSAGES_VISUAL_ONLY' })
+        
+        // Add summary message
         const summaryMessage = createAssistantMessage(formatSummaryMessage(summary), 0)
         dispatch({ type: 'APPLY_SUMMARY', payload: { summaryMessage } })
         
-        console.log('Conversation summarized and preserved processing state')
+        console.log('Conversation summarized, old messages marked as visual-only')
         return true // Indicate that summarization occurred
       } catch (error: any) {
         console.error('Summarization failed:', error)
@@ -271,8 +283,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     // If we restored messages and haven't rebuilt context yet, prepend conversation history BEFORE adding new message
     let messageToSend = userInput
     if (needsContextRebuild && state.messages.length > 0) {
-      console.log('Rebuilding AI context from', state.messages.length, 'previous messages')
-      const history = state.messages.map(msg => {
+      // Only include non-visual messages in AI context
+      const messagesForAI = state.messages.filter(msg => !msg.visualOnly)
+      console.log('Rebuilding AI context from', messagesForAI.length, 'non-visual messages (out of', state.messages.length, 'total)')
+      
+      const history = messagesForAI.map(msg => {
         let content = msg.content
         
         // Truncate base64 images
@@ -376,8 +391,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         // EXCLUDE certain tools from loop detection:
         // - 'think' is just internal reasoning
         // - 'fillInput' is expected to be called multiple times when filling forms
+        // - 'findElements' is expected to be called multiple times when locating different form fields
         // - 'scrollDown'/'scrollUp' may be called many times on long pages
-        const excludedTools = ['think', 'fillInput', 'scrollDown', 'scrollUp']
+        const excludedTools = ['think', 'fillInput', 'findElements', 'scrollDown', 'scrollUp']
         if (!excludedTools.includes(toolCall.function)) {
           recentToolCalls.push({ name: toolCall.function, args: JSON.stringify(toolCall.arguments) })
           
@@ -395,14 +411,37 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
               const toolName = lastThree[0].name
               console.error(`[PROCESSING] INFINITE LOOP DETECTED: ${toolName} called 3 times consecutively`)
               
-              const loopMessage = createAssistantMessage(
-                `LOOP DETECTED: You've called ${toolName} three times in a row. ` +
+              // Inject loop warning as a tool result and let agent continue
+              const loopWarning = `LOOP DETECTED: You've called ${toolName} three times in a row. ` +
                 `Stop calling tools and provide your final answer based on the information you already have. ` +
-                `Describe what you see or learned from the previous tool results.`,
-                0
-              )
-              dispatch({ type: 'ADD_MESSAGE', payload: { ...loopMessage, id: Date.now() + '_loopdetected' } })
-              break
+                `Describe what you see or learned from the previous tool results.`
+              
+              const loopMessage = createAssistantMessage(`[TOOL RESULT]\n${loopWarning}`, 0)
+              dispatch({ type: 'ADD_MESSAGE', payload: { ...loopMessage, id: Date.now() + '_loopwarning_' + loopCount } })
+              
+              // Clear recent calls to prevent re-triggering
+              recentToolCalls.length = 0
+              
+              // Get agent's response to the loop warning and continue
+              let loopResponseContent = ""
+              const loopResponseId = Date.now() + '_loopresponse_' + loopCount
+              
+              const loopResponseCount = await streamResponse('Continue based on the warning above.', (chunk: string) => {
+                loopResponseContent += chunk
+                
+                if (loopResponseContent.length === chunk.length) {
+                  const loopResponseMessage = createAssistantMessage(loopResponseContent, 0)
+                  dispatch({ type: 'ADD_MESSAGE', payload: { ...loopResponseMessage, id: loopResponseId } })
+                } else {
+                  dispatch({ type: 'UPDATE_MESSAGE', payload: { id: loopResponseId, content: loopResponseContent } })
+                }
+              }, loopWarning)
+              
+              dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: loopResponseId, contextCount: loopResponseCount } })
+              
+              currentContent = loopResponseContent
+              loopCount++
+              continue
             }
           }
           
@@ -415,14 +454,36 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             if (pattern1 === pattern2) {
               console.error(`[PROCESSING] CYCLIC LOOP DETECTED: Pattern [${pattern1}] repeated`)
               
-              const loopMessage = createAssistantMessage(
-                `LOOP DETECTED: You're repeating the same sequence of tools (${pattern1}) without making progress. ` +
-                `You have already gathered the information you need. ` +
-                `Now ASK THE USER for the information needed to fill the form fields, or provide your final answer based on what you've learned.`,
-                0
-              )
-              dispatch({ type: 'ADD_MESSAGE', payload: { ...loopMessage, id: Date.now() + '_cycledetected' } })
-              break
+              // Inject cycle warning as a tool result and let agent continue
+              const cycleWarning = `LOOP DETECTED: You're repeating the same sequence of tools (${pattern1}) without making progress. ` +
+                `Stop calling tools and provide your final answer based on the information you already have.`
+              
+              const cycleMessage = createAssistantMessage(`[TOOL RESULT]\n${cycleWarning}`, 0)
+              dispatch({ type: 'ADD_MESSAGE', payload: { ...cycleMessage, id: Date.now() + '_cyclewarning_' + loopCount } })
+              
+              // Clear recent calls to prevent re-triggering
+              recentToolCalls.length = 0
+              
+              // Get agent's response to the cycle warning and continue
+              let cycleResponseContent = ""
+              const cycleResponseId = Date.now() + '_cycleresponse_' + loopCount
+              
+              const cycleResponseCount = await streamResponse('Continue based on the warning above.', (chunk: string) => {
+                cycleResponseContent += chunk
+                
+                if (cycleResponseContent.length === chunk.length) {
+                  const cycleResponseMessage = createAssistantMessage(cycleResponseContent, 0)
+                  dispatch({ type: 'ADD_MESSAGE', payload: { ...cycleResponseMessage, id: cycleResponseId } })
+                } else {
+                  dispatch({ type: 'UPDATE_MESSAGE', payload: { id: cycleResponseId, content: cycleResponseContent } })
+                }
+              }, cycleWarning)
+              
+              dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: cycleResponseId, contextCount: cycleResponseCount } })
+              
+              currentContent = cycleResponseContent
+              loopCount++
+              continue
             }
           }
         }

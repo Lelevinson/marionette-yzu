@@ -1,7 +1,7 @@
-// scrollUp tool - Scroll the current page up
-import type { ToolSpec } from '../../lib/tool-registry'
+// scrollDown tool - Scroll the current page down
+import type { ToolSpec } from '../tool-registry'
 
-async function scrollUp(params: any) {
+async function scrollDown(params: any) {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tab?.id) {
@@ -14,7 +14,7 @@ async function scrollUp(params: any) {
       func: () => {
         const SCROLL_DELTA = 500
         window.scrollBy({
-          top: -SCROLL_DELTA,
+          top: SCROLL_DELTA,
           behavior: 'smooth'
         })
       }
@@ -22,7 +22,7 @@ async function scrollUp(params: any) {
 
     return {
       success: true,
-      result: 'Scrolled up'
+      result: 'Scrolled down'
     }
   } catch (error: any) {
     return { success: false, error: error.message }
@@ -30,15 +30,15 @@ async function scrollUp(params: any) {
 }
 
 export const spec: ToolSpec = {
-  name: 'scrollUp',
-  description: 'Scrolls the current page up by a fixed amount',
+  name: 'scrollDown',
+  description: 'Scrolls the current page down by a fixed amount',
   parameters: [],
   examples: [
-    'User: "scroll up" → scrollUp',
-    'User: "go back up" → scrollUp',
-    'User: "move up on the page" → scrollUp'
+    'User: "scroll down" → scrollDown',
+    'User: "go down" → scrollDown',
+    'User: "move down on the page" → scrollDown'
   ],
-  spokenLine: 'Scrolling up'
+  spokenLine: 'Scrolling down'
 }
 
-export default scrollUp
+export default scrollDown

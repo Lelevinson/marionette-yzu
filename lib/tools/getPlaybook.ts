@@ -1,7 +1,7 @@
 // getPlaybook tool - Retrieve a specific playbook by ID
-import type { ToolSpec } from '../../lib/tool-registry'
-import { getPlaybookById } from '../../lib/playbooks'
-import { generateToolDocumentation, TOOL_FORMAT } from '../../lib/tool-docs'
+import type { ToolSpec } from '../tool-registry'
+import { getPlaybookById } from '../playbooks'
+import { generateToolDocumentation, TOOL_FORMAT } from '../tool-docs'
 
 async function getPlaybook(params: any) {
   try {
@@ -18,7 +18,7 @@ async function getPlaybook(params: any) {
     }
     
     // Lazy load TOOL_REGISTRY to avoid circular dependency
-    const { TOOL_REGISTRY } = require('../../lib/tool-registry')
+    const { TOOL_REGISTRY } = require('../tool-registry')
     
     // Generate tool documentation for required tools
     const toolDocs = generateToolDocumentation(TOOL_REGISTRY, playbook.requiredTools)

@@ -17,7 +17,13 @@ export const openPermissionsPage = () => {
 
 // Helper to open Chrome flags for AI model
 export const openAIFlagsPage = () => {
-  const url = 'chrome://flags/#prompt-api-for-gemini-nano'
+  const url = 'chrome://flags/#prompt-api-for-gemini-nano-multimodal-input'
+  chrome.tabs.create({ url })
+}
+
+// Helper to open Chrome AI documentation
+export const openChromeAIDocs = () => {
+  const url = 'https://developer.chrome.com/docs/ai/prompt-api'
   chrome.tabs.create({ url })
 }
 
@@ -36,6 +42,12 @@ export const openTranslatorAPIFlagsPage = () => {
 // Helper to open Chrome flags for Language Detector API
 export const openLanguageDetectorAPIFlagsPage = () => {
   const url = 'chrome://flags/#language-detection-api'
+  chrome.tabs.create({ url })
+}
+
+// Helper to open Chrome flags for Summarization API
+export const openSummarizationAPIFlagsPage = () => {
+  const url = 'chrome://flags/#summarization-api-for-gemini-nano'
   chrome.tabs.create({ url })
 }
 

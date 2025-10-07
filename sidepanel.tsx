@@ -3,6 +3,7 @@ import { ChatProvider } from "./lib/chat-context"
 import { AlertProvider } from "./lib/alert-context"
 import { MediaDeviceProvider } from "./lib/media-device-context"
 import { TTSProvider } from "./lib/tts-context"
+import { OnboardingProvider } from "./components/onboarding/onboarding-provider"
 import { DebugScreen } from "./screens/debug-screen"
 import { MainScreen } from "./screens/main-screen"
 import { DEFAULT_SCREEN, type Screen } from "./lib/config"
@@ -22,17 +23,19 @@ const SidePanel = () => {
   return (
     <div style={{ height: '100vh', width: '100%' }}>
       <AlertProvider>
-        <MediaDeviceProvider>
-          <TTSProvider>
-            <ChatProvider>
-            {currentScreen === 'main' ? (
-              <MainScreen onNavigateToDebug={() => setCurrentScreen('debug')} fullHeight />
-            ) : (
-              <DebugScreen onNavigateToMain={() => setCurrentScreen('main')} fullHeight />
-            )}
-            </ChatProvider>
-          </TTSProvider>
-        </MediaDeviceProvider>
+        <OnboardingProvider isPopup={false}>
+          <MediaDeviceProvider>
+            <TTSProvider>
+              <ChatProvider>
+              {currentScreen === 'main' ? (
+                <MainScreen onNavigateToDebug={() => setCurrentScreen('debug')} fullHeight />
+              ) : (
+                <DebugScreen onNavigateToMain={() => setCurrentScreen('main')} fullHeight />
+              )}
+              </ChatProvider>
+            </TTSProvider>
+          </MediaDeviceProvider>
+        </OnboardingProvider>
       </AlertProvider>
     </div>
   )

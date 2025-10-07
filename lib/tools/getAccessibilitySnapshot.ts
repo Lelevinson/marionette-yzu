@@ -1,5 +1,5 @@
-import type { ToolSpec } from '../../lib/tool-registry'
-import { generateEmbedding, cosineSimilarity } from '../../lib/embeddings'
+import type { ToolSpec } from '../tool-registry'
+import { generateEmbedding, cosineSimilarity } from '../embeddings'
 
 async function getAccessibilitySnapshot(params: any) {
   try {
@@ -120,13 +120,14 @@ async function getAccessibilitySnapshot(params: any) {
     
     let filteredElements = elements
     let wasFiltered = false
+    let filterMethod = 'none'
     
-    // Use semantic filtering if page is complex AND query is provided
-    const SEMANTIC_FILTER_THRESHOLD = 50
-    if (elements.length > SEMANTIC_FILTER_THRESHOLD && query && typeof query === 'string') {
+    const MAX_ELEMENTS_TO_SHOW = 50
+    
+    // Use semantic filtering if query is provided
+    if (query && typeof query === 'string') {
       try {
-        console.log('[getAccessibilitySnapshot] Page has', elements.length, 'elements, using semantic filtering...')
-        console.log('[getAccessibilitySnapshot] Query:', query)
+        console.log('[getAccessibilitySnapshot] Using semantic filtering with query:', query)
         
         // Generate query embedding
         const queryEmbedding = await generateEmbedding(query)
@@ -141,35 +142,71 @@ async function getAccessibilitySnapshot(params: any) {
           })
         )
         
-        // Sort by similarity and take top 10
+        // Sort by similarity and take top results
         elementsWithSimilarity.sort((a, b) => b.similarity - a.similarity)
-        filteredElements = elementsWithSimilarity.slice(0, 10)
+        filteredElements = elementsWithSimilarity.slice(0, MAX_ELEMENTS_TO_SHOW)
         wasFiltered = true
+        filterMethod = 'semantic'
         
-        console.log('[getAccessibilitySnapshot] Filtered to top 10 elements')
-        console.log('[getAccessibilitySnapshot] Top similarities:', 
-          filteredElements.slice(0, 3).map(e => `${(e.similarity * 100).toFixed(0)}%`).join(', '))
+        console.log('[getAccessibilitySnapshot] Filtered to top', filteredElements.length, 'elements by semantic similarity')
       } catch (embError) {
-        console.warn('[getAccessibilitySnapshot] Semantic filtering failed, showing all:', embError)
-        // Fall through to show warning about too many elements
+        console.warn('[getAccessibilitySnapshot] Semantic filtering failed:', embError)
+        // Fall through to importance-based filtering
       }
     }
     
-    // Check if page is still too complex after filtering
-    const MAX_ELEMENTS_TO_SHOW = 100
+    // If still too many elements (no query or semantic failed), use importance-based filtering
     if (filteredElements.length > MAX_ELEMENTS_TO_SHOW) {
-      return {
-        success: true,
-        result: `TOO MANY ELEMENTS: Found ${elements.length} interactive elements.
-This page is too complex for getAccessibilitySnapshot.
-Try using captureScreenshot, or call getAccessibilitySnapshot with a "query" parameter for semantic filtering.`
-      }
+      console.log('[getAccessibilitySnapshot] Too many elements, filtering by importance...')
+      
+      // Score elements by importance
+      const elementsWithScores = filteredElements.map((el: any) => {
+        let score = 0
+        
+        // Prefer buttons and submit buttons (most interactive)
+        if (el.role === 'button') score += 10
+        if (el.type === 'submit') score += 15
+        
+        // Prefer form inputs
+        if (el.role === 'textbox') score += 8
+        if (el.role === 'combobox') score += 8
+        
+        // Prefer links with meaningful text
+        if (el.role === 'link' && el.name.length > 3) score += 5
+        
+        // Prefer elements with descriptive names
+        if (el.name.length > 5) score += 3
+        if (el.name.length > 20) score += 2
+        
+        // Penalize empty or generic names
+        if (!el.name || el.name.length === 0) score -= 5
+        if (['×', '☰', '≡', '•'].includes(el.name)) score -= 3
+        
+        // Prefer common action words
+        const actionWords = ['submit', 'send', 'save', 'login', 'sign', 'search', 'next', 'back', 'cancel', 'delete', 'add', 'create']
+        if (actionWords.some(word => el.name.toLowerCase().includes(word))) score += 5
+        
+        return { ...el, importanceScore: score }
+      })
+      
+      // Sort by importance and take top elements
+      elementsWithScores.sort((a, b) => b.importanceScore - a.importanceScore)
+      filteredElements = elementsWithScores.slice(0, MAX_ELEMENTS_TO_SHOW)
+      wasFiltered = true
+      filterMethod = 'importance'
+      
+      console.log('[getAccessibilitySnapshot] Filtered to top', filteredElements.length, 'elements by importance')
     }
     
     // Format as readable text
-    let output = wasFiltered 
-      ? `Found ${elements.length} elements, filtered to top ${filteredElements.length} most relevant to "${query}":\n\n`
-      : `Found ${filteredElements.length} interactive elements:\n\n`
+    let output = ''
+    if (filterMethod === 'semantic') {
+      output = `Found ${elements.length} elements, filtered to top ${filteredElements.length} by semantic relevance to "${query}":\n\n`
+    } else if (filterMethod === 'importance') {
+      output = `Found ${elements.length} elements, showing top ${filteredElements.length} most important:\n\n`
+    } else {
+      output = `Found ${filteredElements.length} interactive elements:\n\n`
+    }
     
     filteredElements.forEach((el: any) => {
       const disabled = el.disabled ? ' [DISABLED]' : ''
@@ -191,12 +228,12 @@ Try using captureScreenshot, or call getAccessibilitySnapshot with a "query" par
 
 export const spec: ToolSpec = {
   name: 'getAccessibilitySnapshot',
-  description: 'Gets a list of all interactive elements on the current page with their accessibility information. For complex pages with 50+ elements, provide a query parameter to use AI-powered semantic filtering.',
+  description: 'Gets a list of interactive elements on the current page. Automatically filters to top 50 most important elements on complex pages. Use query parameter for semantic filtering.',
   parameters: [
     {
       name: 'query',
       type: 'string',
-      description: 'Optional: Semantic search query to filter elements on complex pages (e.g., "submit button", "login form", "navigation menu")',
+      description: 'Optional: Semantic search query to filter elements (e.g., "submit button", "login form", "email input")',
       required: false
     }
   ],
@@ -205,7 +242,7 @@ export const spec: ToolSpec = {
     'User: "what can I click on this page?" → getAccessibilitySnapshot',
     'User: "show me the buttons" → getAccessibilitySnapshot',
     'User: "list all links" → getAccessibilitySnapshot',
-    'Complex page with many elements → getAccessibilitySnapshot with query: "submit button"'
+    'Find specific elements → getAccessibilitySnapshot with query: "submit button"'
   ]
 }
 

@@ -6,6 +6,7 @@ export interface Message {
   timestamp: number
   contextCount?: number
   rating?: 'up' | 'down' | null
+  visualOnly?: boolean // If true, message is displayed in UI but not sent to AI
 }
 
 export function createUserMessage(content: string): Message {

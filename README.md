@@ -88,7 +88,7 @@ marionette/
 │       ├── email.ts            # Gmail email playbook
 │       └── types.ts
 │
-├── background/messages/         # Background message handlers
+├── tools/         # Background message handlers
 │   ├── captureScreenshot.ts
 │   ├── clickElement.ts
 │   ├── findElements.ts
@@ -611,7 +611,7 @@ eslint . --ext .ts,.tsx
 1. **Create message handler:**
 
 ```typescript
-// background/messages/myTool.ts
+// tools/myTool.ts
 import type { PlasmoMessaging } from "@plasmohq/messaging"
 
 const handler: PlasmoMessaging.MessageHandler = async (req, res) => {

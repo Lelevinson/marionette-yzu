@@ -97,7 +97,7 @@ draw_box(ax, 'extract_args', color_parse, 'Extract\nArguments')
 draw_box(ax, 'tool_registry', color_execute, 'Tool Registry\n(22 tools)', border_width=3)
 draw_box(ax, 'validate', color_execute, 'Validate Tool\nExists')
 draw_box(ax, 'send_message', color_execute, 'Send to Background\nPlasmo Message')
-draw_box(ax, 'handler', color_execute, 'Execute Handler\nbackground/messages/')
+draw_box(ax, 'handler', color_execute, 'Execute Handler\ntools/')
 draw_box(ax, 'success', color_result, 'Success Result\n{success: true, data}')
 draw_box(ax, 'error', color_result, 'Error Result\n{success: false, error}')
 draw_box(ax, 'format_result', color_result, '[TOOL RESULT] ...')
@@ -243,7 +243,7 @@ handler_box_y = 2.5
 ax.text(handler_box_x, handler_box_y + 0.5, 'Handler:', 
         fontsize=10, color='white', weight='bold')
 ax.text(handler_box_x, handler_box_y + 0.2, 
-        'background/messages/',
+        'tools/',
         fontsize=7, color='#666666', family='monospace')
 ax.text(handler_box_x, handler_box_y - 0.1, 
         'openTab.ts',

@@ -1,5 +1,5 @@
 // highlightSelector tool - Highlight an element by CSS selector
-import type { ToolSpec } from '../../lib/tool-registry'
+import type { ToolSpec } from '../tool-registry'
 
 async function highlightSelector(params: any) {
   try {
@@ -24,10 +24,10 @@ async function highlightSelector(params: any) {
         }
 
         // Store original background
-        const originalBackground = (element as HTMLElement).style.backgroundColor
+        const originalBackground = (element as HTMLElement).style.backgroundColor as string
         
         // Highlight in yellow
-        (element as HTMLElement).style.backgroundColor = 'yellow'
+        (element as HTMLElement).style.backgroundColor = 'yellow' as string
         (element as HTMLElement).style.transition = 'background-color 0.3s ease'
         
         // Scroll element into view
