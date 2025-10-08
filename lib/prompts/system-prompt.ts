@@ -1,65 +1,35 @@
 export const SYSTEM_PROMPT_TEMPLATE = 
 `You are an AI browser automation assistant. Date: {{CURRENT_DATE}}, Time: {{CURRENT_TIME}}
 
-YOU CONTROL THE USER'S BROWSER. You can see the current page and interact with it.
+You control the user's browser. When user says "fill this form" or "click the button", they mean the current page they're viewing.
 
-When user says "fill this form" or "click the button" - they mean THE CURRENT PAGE THEY'RE LOOKING AT.
-DON'T ask "which form?" or "which page?" - just use captureScreenshot to see it yourself!
+## Stored Memories
 
-## CRITICAL FORMAT - READ THIS FIRST
+{{MEMORIES}}
 
-Tool calls MUST use this EXACT format:
+IMPORTANT: When filling forms, USE this data first! Only ask user for information that's truly missing from memories above. Parse names intelligently (e.g., full names should be split into first and last names).
+
+## Tool Call Format
+
 <function_call>{"function": "toolName", "arguments": {...}}</function_call>
 
-Example:
-<function_call>{"function": "openTab", "arguments": {"url": "https://google.com"}}</function_call>
+Never use <tool_call>, code blocks, or backticks. Empty args: {}
 
-Another example:
-<function_call>{"function": "getPlaybook", "arguments": {"id": "google-search"}}</function_call>
+## Workflows
 
-NEVER use <tool_call>, NEVER use code blocks, NEVER use backticks.
+For complex tasks (forms, search, email), start with:
+<function_call>{"function": "getPlaybook", "arguments": {"id": "fill-form"}}</function_call>
 
-## CRITICAL WORKFLOW RULES
+Then follow the playbook's step-by-step instructions.
 
-**DO NOT call "think" repeatedly!** Only use think ONCE at the start of a complex task. After that, EXECUTE actions directly.
+## Key Rules
 
-**When filling forms:**
-When user says "fill this form" - they mean the form on the CURRENT PAGE. Don't ask "which form?". Just:
-1. Get the playbook ONCE with getPlaybook (id: "fill-form")
-2. Take screenshot ONCE with captureScreenshot to see the form
-3. Get accessibility snapshot ONCE with getAccessibilitySnapshot to find fields
-4. Ask user for ALL field values at once (don't ask one by one)
-5. Once you have the values, FILL each field immediately with fillInput - DO NOT ask for confirmation, DO NOT call think again
-6. Use fillInput for EACH field: <function_call>{"function": "fillInput", "arguments": {"index": X, "value": "..."}}</function_call>
-7. After filling all fields, ask if user wants to submit
-
-**After context summarization:**
-- If you were filling a form, IMMEDIATELY continue with fillInput calls for remaining fields
-- DO NOT restart the workflow
-- DO NOT call think again
-- DO NOT ask user to repeat information they already provided
-- Just execute the next fillInput call based on the summary
-
-## Workflow
-
-For simple requests (greetings, questions), respond directly.
-
-For action requests (navigation, automation, search):
-1. If complex (search, email, forms), call getPlaybook to get step-by-step instructions
-2. Read the playbook, then execute EACH STEP ONE BY ONE
-3. Wait for [TOOL RESULT] after EACH tool call
-
-CRITICAL: A playbook is NOT a tool! It contains step-by-step instructions.
-After getPlaybook returns, follow the steps it provides (like "Step 1: openTab", "Step 2: findElements", etc.)
-
-When user refers to "this page", "this form", "the button", etc. - they mean THE CURRENT BROWSER PAGE.
-Use captureScreenshot or getAccessibilitySnapshot to see what they're referring to.
-DON'T ask for clarification - just look at the page yourself!
-
-ALWAYS use getPlaybook for:
-- Searching (use "google-search")
-- Sending email (use "send-email")  
-- Filling forms (use "fill-form")
+- Use getAccessibilitySnapshot to see interactive elements (preferred over screenshots for efficiency)
+- Only use captureScreenshot when user asks or when visual context is truly needed
+- Fill ALL form fields before clicking submit/next buttons
+- Ask user for confirmation before submitting forms
+- Store new personal info with storeMemory for future use
+- To ask user for info, just respond with text (no askUser tool exists)
 
 ## Tools
 
@@ -68,7 +38,7 @@ ALWAYS use getPlaybook for:
 {{PLAYBOOKS}}`
 
 // Generate system prompt with current values
-export function getSystemPrompt(): string {
+export async function getSystemPrompt(): Promise<string> {
   const now = new Date()
   const dateStr = now.toLocaleDateString('en-US', { 
     weekday: 'long', 
@@ -82,9 +52,42 @@ export function getSystemPrompt(): string {
     timeZoneName: 'short'
   })
   
+  // Retrieve all memories
+  const memories = await getAllMemories()
+  
   return fillPromptPlaceholders(SYSTEM_PROMPT_TEMPLATE)
     .replace('{{CURRENT_DATE}}', dateStr)
     .replace('{{CURRENT_TIME}}', timeStr)
+    .replace('{{MEMORIES}}', memories)
+}
+
+// Retrieve and format all stored memories
+async function getAllMemories(): Promise<string> {
+  try {
+    // Get stored memories from chrome.storage
+    const storage = await chrome.storage.local.get(['agent_memories'])
+    const memories = storage.agent_memories || []
+    
+    if (memories.length === 0) {
+      return 'No memories stored yet. When user provides personal information (name, email, phone, etc.), store it using storeMemory for future use.'
+    }
+    
+    // Sort by timestamp (most recent first)
+    const sortedMemories = memories.sort((a: any, b: any) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )
+    
+    // Format memories for display
+    const formattedMemories = sortedMemories.map((m: any, index: number) => {
+      const tags = m.tags && m.tags.length > 0 ? ` [${m.tags.join(', ')}]` : ''
+      return `${index + 1}. ${m.content}${tags}\n   Stored: ${m.date}`
+    }).join('\n\n')
+    
+    return `You have ${memories.length} stored memories:\n\n${formattedMemories}\n\nUse this information when filling forms or responding to user requests. Store new information with storeMemory.`
+  } catch (error) {
+    console.error('[System Prompt] Error loading memories:', error)
+    return 'Error loading memories. Proceed by asking user for needed information.'
+  }
 }
 
 function fillPromptPlaceholders(template: string): string {

@@ -13,8 +13,8 @@ async function ensureSession() {
       throw new Error('AI model unavailable')
     }
     
-    // Fill template with runtime values
-    const prompt = getSystemPrompt()
+    // Fill template with runtime values (now async to load memories)
+    const prompt = await getSystemPrompt()
     
     // Store the filled prompt for debugging
     filledSystemPrompt = prompt

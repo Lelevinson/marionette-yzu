@@ -373,9 +373,35 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         const invalidFormat = detectInvalidToolFormat(currentContent)
         if (invalidFormat) {
           console.error('[PROCESSING] Invalid tool format detected:', invalidFormat)
-          const errorMessage = createAssistantMessage(`⚠️ FORMAT ERROR: ${invalidFormat}`, 0)
-          dispatch({ type: 'ADD_MESSAGE', payload: { ...errorMessage, id: Date.now() + '_formaterror' } })
-          break
+          
+          // Instead of breaking, provide corrective feedback as a tool result and let agent retry
+          const correctionMessage = `[TOOL RESULT]\nError: ${invalidFormat}\n\nRemember the correct format:\n<function_call>{"function": "toolName", "arguments": {...}}</function_call>\n\nPlease retry using the correct format.`
+          
+          const errorResultMessage = createAssistantMessage(correctionMessage, 0)
+          dispatch({ type: 'ADD_MESSAGE', payload: { ...errorResultMessage, id: Date.now() + '_formaterror' } })
+          
+          // Get AI response with correction
+          let correctionResponseContent = ""
+          const correctionResponseId = Date.now() + '_correction_' + loopCount
+          
+          const correctionContextCount = await streamResponse(correctionMessage, (chunk: string) => {
+            correctionResponseContent += chunk
+            
+            if (correctionResponseContent.length === chunk.length) {
+              const correctionResponseMessage = createAssistantMessage(correctionResponseContent, 0)
+              dispatch({ type: 'ADD_MESSAGE', payload: { ...correctionResponseMessage, id: correctionResponseId } })
+            } else {
+              dispatch({ type: 'UPDATE_MESSAGE', payload: { id: correctionResponseId, content: correctionResponseContent } })
+            }
+          })
+          
+          // Update context count for the correction response
+          dispatch({ type: 'UPDATE_MESSAGE_CONTEXT', payload: { id: correctionResponseId, contextCount: correctionContextCount } })
+          
+          // Update current content and continue loop
+          currentContent = correctionResponseContent
+          loopCount++
+          continue
         }
         
         const toolCall = parseToolCall(currentContent)

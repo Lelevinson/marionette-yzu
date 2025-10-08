@@ -325,6 +325,201 @@ const OnboardingControls = () => {
   )
 }
 
+const MemoriesDebugger = () => {
+  const [memories, setMemories] = useState<any[]>([])
+  const [newMemoryContent, setNewMemoryContent] = useState("")
+  const [newMemoryTags, setNewMemoryTags] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+
+  const loadMemories = async () => {
+    setIsLoading(true)
+    try {
+      const storage = await chrome.storage.local.get(['agent_memories'])
+      const memoriesData = storage.agent_memories || []
+      // Sort by timestamp (most recent first)
+      const sorted = memoriesData.sort((a: any, b: any) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+      setMemories(sorted)
+    } catch (error: any) {
+      console.error('Error loading memories:', error)
+    }
+    setIsLoading(false)
+  }
+
+  const handleAddMemory = async () => {
+    if (!newMemoryContent.trim()) return
+
+    setIsLoading(true)
+    try {
+      const tags = newMemoryTags
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t.length > 0)
+
+      // Use the storeMemory tool
+      const result = await executeTool({
+        function: 'storeMemory',
+        arguments: {
+          content: newMemoryContent.trim(),
+          tags: tags.length > 0 ? tags : undefined
+        }
+      })
+
+      if (result.success) {
+        setNewMemoryContent("")
+        setNewMemoryTags("")
+        await loadMemories()
+      } else {
+        alert(`Error: ${result.error}`)
+      }
+    } catch (error: any) {
+      alert(`Error: ${error.message}`)
+    }
+    setIsLoading(false)
+  }
+
+  const handleDeleteMemory = async (memoryId: string) => {
+    if (!confirm('Delete this memory?')) return
+
+    setIsLoading(true)
+    try {
+      const storage = await chrome.storage.local.get(['agent_memories'])
+      const memoriesData = storage.agent_memories || []
+      const updated = memoriesData.filter((m: any) => m.id !== memoryId)
+      await chrome.storage.local.set({ agent_memories: updated })
+      await loadMemories()
+    } catch (error: any) {
+      alert(`Error: ${error.message}`)
+    }
+    setIsLoading(false)
+  }
+
+  const handleClearAll = async () => {
+    if (!confirm('Are you sure you want to delete ALL memories? This cannot be undone.')) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await chrome.storage.local.set({ agent_memories: [] })
+      await loadMemories()
+    } catch (error: any) {
+      alert(`Error: ${error.message}`)
+    }
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    loadMemories()
+  }, [])
+
+  return (
+    <>
+      {/* Stats */}
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-mono text-gray-400">
+          Total: {memories.length} {memories.length === 1 ? 'memory' : 'memories'}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={loadMemories}
+            disabled={isLoading}
+            className="px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded text-[10px] font-mono"
+          >
+            Refresh
+          </button>
+          <button
+            onClick={handleClearAll}
+            disabled={isLoading || memories.length === 0}
+            className="px-2 py-1 bg-red-900 hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed rounded text-[10px] font-mono"
+          >
+            Clear All
+          </button>
+        </div>
+      </div>
+
+      {/* Add Memory Form */}
+      <div className="space-y-2 bg-gray-900 border border-gray-700 rounded p-2">
+        <div className="text-xs font-mono text-gray-400">Add New Memory:</div>
+        <textarea
+          value={newMemoryContent}
+          onChange={(e) => setNewMemoryContent(e.target.value)}
+          placeholder="Memory content (e.g., 'User's name is John Doe')"
+          className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-gray-500 h-16 resize-none"
+        />
+        <input
+          type="text"
+          value={newMemoryTags}
+          onChange={(e) => setNewMemoryTags(e.target.value)}
+          placeholder="Tags (comma-separated, e.g., 'personal-info, name')"
+          className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-gray-500"
+        />
+        <button
+          onClick={handleAddMemory}
+          disabled={isLoading || !newMemoryContent.trim()}
+          className="w-full px-3 py-1 bg-green-900 hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs font-mono flex items-center justify-center gap-2"
+        >
+          <Play className="w-3 h-3" />
+          Add Memory
+        </button>
+      </div>
+
+      {/* Memories List */}
+      <div className="space-y-2">
+        <div className="text-xs font-mono text-gray-400">Stored Memories:</div>
+        {memories.length === 0 ? (
+          <div className="bg-gray-900 border border-gray-700 rounded p-3 text-center text-xs text-gray-500 font-mono">
+            No memories stored yet
+          </div>
+        ) : (
+          <div className="bg-gray-900 border border-gray-700 rounded p-2 max-h-80 overflow-y-auto space-y-2">
+            {memories.map((memory: any) => (
+              <div
+                key={memory.id}
+                className="bg-gray-950 border border-gray-800 rounded p-2 hover:border-gray-700 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-gray-300 font-mono break-words">
+                      {memory.content}
+                    </div>
+                    {memory.tags && memory.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {memory.tags.map((tag: string, i: number) => (
+                          <span
+                            key={i}
+                            className="px-1.5 py-0.5 bg-purple-900 text-purple-300 rounded text-[9px] font-mono"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-[9px] text-gray-600 font-mono mt-1">
+                      {memory.date}
+                      {memory.embedding && (
+                        <span className="ml-2 text-purple-500">● embedded</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMemory(memory.id)}
+                    disabled={isLoading}
+                    className="px-2 py-1 bg-red-900 hover:bg-red-800 disabled:opacity-50 rounded text-[9px] font-mono shrink-0"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
 const VaultDebugger = () => {
   const [stats, setStats] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -738,6 +933,11 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
       {/* Transformers.js Test */}
       <CollapsibleSection title="TRANSFORMERS.JS TEST">
         <TransformersTest />
+      </CollapsibleSection>
+
+      {/* Memories Debugger */}
+      <CollapsibleSection title="MEMORIES MANAGER">
+        <MemoriesDebugger />
       </CollapsibleSection>
 
       {/* Vault Debugger */}
