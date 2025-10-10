@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Marionette Demo](./MarionetteDemo.gif)
+<img src="./MarionetteDemo.gif" alt="Marionette Demo" height="400" />
 
 **AI browser automation agent powered by Chrome's built-in Gemini Nano**
 
@@ -122,7 +122,9 @@ The onboarding actively guides you through flag setup with clickable buttons tha
 
 We built Marionette to run a capable AI agent entirely on-device, which meant working around some tight constraints while keeping things snappy and reliable.
 
-![System Architecture](./diagrams/Marionette%20Diagram.png)
+<div align="center">
+<img src="./diagrams/Marionette%20Diagram.png" alt="System Architecture" height="500" />
+</div>
 
 ### The Constraints
 
@@ -138,7 +140,9 @@ The agentic loop is straightforward: after each tool execution, we return the re
 
 At the heart is Chrome's Prompt API running Gemini Nano. It takes multimodal inputs—text, images from screenshots, audio clips—and streams back responses. We scan those for tool calls, execute them, and loop the results back in. It's a simple cycle: input → think → act → observe → repeat.
 
-![Agent Loop](./diagrams/agent_loop.png)
+<div align="center">
+<img src="./diagrams/agent_loop.png" alt="Agent Loop" height="400" />
+</div>
 
 ### Multimodal Understanding
 
@@ -167,7 +171,9 @@ The agent constructs a mental model of each webpage through multiple perception 
 | Contextual | Page metadata | Title, URL, timestamp | Orient in navigation flow, track state |
 | Query | findElements | Indexed element references | Locate specific UI components by description |
 
-![Agent Perception](./diagrams/agent_perception.png)
+<div align="center">
+<img src="./diagrams/agent_perception.png" alt="Agent Perception" height="400" />
+</div>
 
 **Interaction Primitives:**
 
@@ -178,7 +184,9 @@ The agent constructs a mental model of each webpage through multiple perception 
 | scrollUp/Down | amount | window.scrollBy() | Long pages, infinite scroll, reveal content |
 | pressKey | key | KeyboardEvent dispatch | Enter to submit, Escape to close, Tab to navigate |
 
-![Agent Interaction](./diagrams/agent_interaction.png)
+<div align="center">
+<img src="./diagrams/agent_interaction.png" alt="Agent Interaction" height="400" />
+</div>
 
 Element indices come from findElements, which queries the accessibility tree by natural language ("search button", "email input"). The agent receives numbered references like `[12] Button: "Submit"` and uses that index for precise targeting. This indirection layer prevents ambiguity—no guessing at selectors or XPaths.
 
@@ -195,7 +203,9 @@ The small model needs domain context to behave reliably—understanding task pat
 
 By deferring specialized tools to playbooks, we reclaim ~1,550 tokens—roughly an extra 1,200 words of conversation history or tool results.
 
-![Playbook System](./diagrams/playbook_system.png)
+<div align="center">
+<img src="./diagrams/playbook_system.png" alt="Playbook System" height="400" />
+</div>
 
 ### Embeddings and Token Efficiency
 
@@ -245,7 +255,9 @@ After summarization, we prepend instructions to the agent:
 
 This alignment ensures the agent doesn't lose track mid-task or ask users to repeat information.
 
-![Summarization Flow](./diagrams/summarization.png)
+<div align="center">
+<img src="./diagrams/summarization.png" alt="Summarization Flow" height="400" />
+</div>
 
 ### Memory Setup
 
@@ -259,7 +271,9 @@ When the agent needs information—"What did I read about React hooks?"—it cal
 
 The vault grows indefinitely (IndexedDB has no practical storage limit in extensions), though we could add cleanup logic later. For now, the assumption is: more history is better.
 
-![Semantic Vault](./diagrams/semantic_vault.png)
+<div align="center">
+<img src="./diagrams/semantic_vault.png" alt="Semantic Vault" height="400" />
+</div>
 
 ### Privacy and Security
 
@@ -310,7 +324,9 @@ But some tools require a user gesture (like writeContent, which uses Chrome's Wr
 
 Other tools, like listen or captureScreenshot, need content script injection to access the page or tab media. We check the context, inject scripts if needed, execute, and clean up. The routing layer abstracts all this complexity: from the agent's perspective, every tool is just a function call with a JSON result.
 
-![Tool Routing](./diagrams/tool_routing.png)
+<div align="center">
+<img src="./diagrams/tool_routing.png" alt="Tool Routing" height="400" />
+</div>
 
 ### Extensibility and Modularity
 
