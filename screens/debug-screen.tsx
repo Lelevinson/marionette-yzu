@@ -10,6 +10,7 @@ import { searchVault, getVaultStats, clearVault } from "../lib/vault"
 import { useWakeWordBuiltIn } from "../lib/use-wake-word-builtin"
 import { RatingButtons } from "../components/rating-buttons"
 import { useOnboarding } from "../components/onboarding/onboarding-provider"
+import { getRatingStats, clearAllRatings, exportRatings } from "../lib/rating-database"
 
 interface DebugScreenProps {
   onNavigateToMain: () => void
@@ -520,6 +521,119 @@ const MemoriesDebugger = () => {
   )
 }
 
+const RatingStatsDebugger = () => {
+  const [stats, setStats] = useState<{ total: number; positive: number; negative: number } | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const loadStats = async () => {
+    setIsLoading(true)
+    try {
+      const ratingStats = await getRatingStats()
+      setStats(ratingStats)
+    } catch (error: any) {
+      console.error('Error loading rating stats:', error)
+      setStats({ total: 0, positive: 0, negative: 0 })
+    }
+    setIsLoading(false)
+  }
+
+  const handleClearRatings = async () => {
+    if (!confirm('Are you sure you want to clear all ratings? This cannot be undone.')) {
+      return
+    }
+    
+    setIsLoading(true)
+    try {
+      await clearAllRatings()
+      await loadStats()
+      alert('All ratings cleared successfully!')
+    } catch (error: any) {
+      alert(`Error clearing ratings: ${error.message}`)
+    }
+    setIsLoading(false)
+  }
+
+  const handleExportRatings = async () => {
+    setIsLoading(true)
+    try {
+      const jsonData = await exportRatings()
+      
+      // Create download link
+      const blob = new Blob([jsonData], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `marionette-ratings-${Date.now()}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      alert('Ratings exported successfully!')
+    } catch (error: any) {
+      alert(`Error exporting ratings: ${error.message}`)
+    }
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    loadStats()
+  }, [])
+
+  return (
+    <>
+      {/* Stats Section */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-mono text-gray-400">Rating Statistics:</div>
+          <button
+            onClick={loadStats}
+            disabled={isLoading}
+            className="px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded text-[10px] font-mono"
+          >
+            Refresh
+          </button>
+        </div>
+        
+        {stats && (
+          <div className="bg-gray-900 border border-gray-700 rounded p-2 text-[10px] font-mono">
+            <div className="text-gray-300 space-y-1">
+              <div>📊 Total Ratings: {stats.total}</div>
+              <div className="flex items-center gap-3">
+                <div className="text-green-400">👍 Positive: {stats.positive}</div>
+                <div className="text-red-400">👎 Negative: {stats.negative}</div>
+              </div>
+              {stats.total > 0 && (
+                <div className="text-gray-500 text-[9px] mt-1">
+                  Positive Rate: {((stats.positive / stats.total) * 100).toFixed(1)}%
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleExportRatings}
+          disabled={isLoading || !stats || stats.total === 0}
+          className="flex-1 px-3 py-2 bg-blue-900 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs font-mono"
+        >
+          Export JSON
+        </button>
+        <button
+          onClick={handleClearRatings}
+          disabled={isLoading || !stats || stats.total === 0}
+          className="flex-1 px-3 py-2 bg-red-900 hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs font-mono"
+        >
+          Clear All
+        </button>
+      </div>
+    </>
+  )
+}
+
 const VaultDebugger = () => {
   const [stats, setStats] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -915,35 +1029,43 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
         </div>
       </div>
 
-      {/* Onboarding Controls */}
-      <CollapsibleSection title="ONBOARDING">
-        <OnboardingControls />
-      </CollapsibleSection>
+      {/* Scrollable Tools & Debuggers Section */}
+      <div className="overflow-y-auto border-b border-gray-800 flex-shrink-0" style={{ height: '30vh', minHeight: '200px', maxHeight: '300px' }}>
+        {/* Onboarding Controls */}
+        <CollapsibleSection title="ONBOARDING">
+          <OnboardingControls />
+        </CollapsibleSection>
 
-      {/* Tool Tester */}
-      <CollapsibleSection title="MANUAL_TOOL_TEST">
-        <ToolTester />
-      </CollapsibleSection>
+        {/* Tool Tester */}
+        <CollapsibleSection title="MANUAL_TOOL_TEST">
+          <ToolTester />
+        </CollapsibleSection>
 
-      {/* Wake Word Test */}
-      <CollapsibleSection title="WAKE WORD TEST">
-        <WakeWordTest />
-      </CollapsibleSection>
+        {/* Wake Word Test */}
+        <CollapsibleSection title="WAKE WORD TEST">
+          <WakeWordTest />
+        </CollapsibleSection>
 
-      {/* Transformers.js Test */}
-      <CollapsibleSection title="TRANSFORMERS.JS TEST">
-        <TransformersTest />
-      </CollapsibleSection>
+        {/* Transformers.js Test */}
+        <CollapsibleSection title="TRANSFORMERS.JS TEST">
+          <TransformersTest />
+        </CollapsibleSection>
 
-      {/* Memories Debugger */}
-      <CollapsibleSection title="MEMORIES MANAGER">
-        <MemoriesDebugger />
-      </CollapsibleSection>
+        {/* Memories Debugger */}
+        <CollapsibleSection title="MEMORIES MANAGER">
+          <MemoriesDebugger />
+        </CollapsibleSection>
 
-      {/* Vault Debugger */}
-      <CollapsibleSection title="VAULT DEBUGGER">
-        <VaultDebugger />
-      </CollapsibleSection>
+        {/* Vault Debugger */}
+        <CollapsibleSection title="VAULT DEBUGGER">
+          <VaultDebugger />
+        </CollapsibleSection>
+
+        {/* Rating Stats */}
+        <CollapsibleSection title="RATING STATS">
+          <RatingStatsDebugger />
+        </CollapsibleSection>
+      </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3">

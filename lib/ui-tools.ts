@@ -320,7 +320,15 @@ export async function executeUITool(toolCall: ToolCall): Promise<any> {
   const handler = TOOL_IMPLEMENTATIONS[toolCall.function]
   
   if (!handler) {
-    return { success: false, error: `UI tool ${toolCall.function} not implemented in ui-tools.ts` }
+    const { findSimilarTools } = require('./tool-registry')
+    const similarTools = findSimilarTools(toolCall.function)
+    let errorMessage = `UI tool ${toolCall.function} not implemented in ui-tools.ts`
+    
+    if (similarTools.length > 0) {
+      errorMessage += `\n\nDid you mean one of these?\n- ${similarTools.join('\n- ')}`
+    }
+    
+    return { success: false, error: errorMessage }
   }
   
   try {

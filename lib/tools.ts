@@ -6,14 +6,13 @@ export interface ToolCall {
 
 export function detectInvalidToolFormat(content: string): string | null {
   // Check for common wrong formats
-  if (content.includes('```tool_code')) {
-    return 'Invalid format detected: ```tool_code - must use <function_call> with angle brackets'
-  }
-  if (content.includes('```function_call')) {
-    return 'Invalid format detected: ```function_call - must use <function_call> with angle brackets'
-  }
-  if (content.includes('```json') && content.includes('function')) {
-    return 'Invalid format detected: ```json code block - must use <function_call> with angle brackets'
+  if (content.includes('```tool_code') || content.includes('```function_call') || (content.includes('```json') && content.includes('function'))) {
+    return `STOP using code blocks! Just write this directly (no backticks, no code blocks):
+
+<function_call>{"function": "findElements", "arguments": {"query": "email"}}</function_call>
+
+Do NOT write: \`\`\`tool_code or \`\`\`json or \`\`\`function_call
+Just write the <function_call> directly in your response.`
   }
   if (/print\s*\(/.test(content) && /get|click|fill|open/i.test(content)) {
     return 'Invalid format detected: print() syntax - must use <function_call> format'

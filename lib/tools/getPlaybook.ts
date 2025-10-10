@@ -43,7 +43,7 @@ ${TOOL_FORMAT}`
 
 export const spec: ToolSpec = {
   name: 'getPlaybook',
-  description: 'Retrieve a specific workflow playbook by ID to get detailed step-by-step instructions',
+  description: 'Retrieve step-by-step instructions for complex workflows. The playbook will tell you exactly which tools to call and in what order.',
   parameters: [
     {
       name: 'id',
@@ -53,9 +53,10 @@ export const spec: ToolSpec = {
     }
   ],
   examples: [
-    'User: "search for weather" → getPlaybook with id: "google-search" to retrieve search workflow',
-    'User: "send email" → getPlaybook with id: "send-email" to retrieve email workflow',
-    'When starting a complex workflow → getPlaybook to get detailed instructions'
+    'User: "search for weather" → <function_call>{"function": "getPlaybook", "arguments": {"id": "google-search"}}</function_call>',
+    'User: "google AAPL stock" → <function_call>{"function": "getPlaybook", "arguments": {"id": "google-search"}}</function_call>',
+    'User: "send email" → <function_call>{"function": "getPlaybook", "arguments": {"id": "send-email"}}</function_call>',
+    'User: "fill this form" → <function_call>{"function": "getPlaybook", "arguments": {"id": "fill-form"}}</function_call>'
   ],
   spokenLine: 'Getting workflow instructions'
 }

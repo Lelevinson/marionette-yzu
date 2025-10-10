@@ -15,6 +15,7 @@ import { spec as translateTextSpec } from './tools/translateText'
 import { spec as detectLanguageSpec } from './tools/detectLanguage'
 import { spec as scrollUpSpec } from './tools/scrollUp'
 import { spec as scrollDownSpec } from './tools/scrollDown'
+import { spec as pressKeySpec } from './tools/pressKey'
 import { spec as highlightSelectorSpec } from './tools/highlightSelector'
 import { spec as highlightTextSpec } from './tools/highlightText'
 import { spec as captureCurrentPageSpec } from './tools/captureCurrentPage'
@@ -23,6 +24,8 @@ import { spec as getVaultStatsSpec } from './tools/getVaultStats'
 import { spec as getPlaybookSpec } from './tools/getPlaybook'
 import { spec as thinkSpec } from './tools/think'
 import { spec as summarizePageSpec } from './tools/summarizePage'
+import { spec as getTabsSpec } from './tools/getTabs'
+import { spec as switchTabSpec } from './tools/switchTab'
 
 export interface ToolParameter {
   name: string
@@ -59,12 +62,15 @@ export const TOOL_REGISTRY: ToolSpec[] = [
   detectLanguageSpec,
   scrollUpSpec,
   scrollDownSpec,
+  pressKeySpec,
   highlightSelectorSpec,
   highlightTextSpec,
   captureCurrentPageSpec,
   searchVaultSpec,
   getVaultStatsSpec,
-  getPlaybookSpec
+  getPlaybookSpec,
+  getTabsSpec,
+  switchTabSpec
 ]
 
 // Generate formatted tool documentation for specific tools
@@ -130,4 +136,64 @@ export function getSpokenLine(toolName: string, params?: Record<string, any>): s
   }
   
   return spokenLine
+}
+
+// Calculate Levenshtein distance between two strings
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix: number[][] = []
+  
+  // Initialize first column and row
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i]
+  }
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j
+  }
+  
+  // Fill in the rest of the matrix
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1]
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        )
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length]
+}
+
+// Find similar tool names using fuzzy matching
+export function findSimilarTools(invalidToolName: string, maxSuggestions: number = 3): string[] {
+  const toolNames = getToolNames()
+  const lowerInvalid = invalidToolName.toLowerCase()
+  
+  // Calculate similarity scores for all tools
+  const scores = toolNames.map(toolName => {
+    const lowerTool = toolName.toLowerCase()
+    
+    // Check if invalid name is substring (high priority)
+    const substringMatch = lowerTool.includes(lowerInvalid) || lowerInvalid.includes(lowerTool)
+    
+    // Calculate Levenshtein distance
+    const distance = levenshteinDistance(lowerInvalid, lowerTool)
+    
+    // Calculate similarity score (lower is better)
+    // Substring matches get bonus
+    const score = substringMatch ? distance - 100 : distance
+    
+    return { toolName, score }
+  })
+  
+  // Sort by score (ascending) and return top matches
+  return scores
+    .sort((a, b) => a.score - b.score)
+    .slice(0, maxSuggestions)
+    .filter(item => item.score < lowerInvalid.length * 1.5) // Only suggest if reasonably similar
+    .map(item => item.toolName)
 }

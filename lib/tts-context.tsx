@@ -30,20 +30,50 @@ const estimateSpeakingDuration = (text: string): number => {
   return Math.min(Math.max(baseTime, minTime), maxTime)
 }
 
+// Heuristic: consider a sentence complete when it ends with ! or ?;
+// for '.' require that the token before '.' is preceded by start-of-line or whitespace
+// to avoid treating emails/URLs like "name@domain." as sentences during streaming.
+const isCompleteSentence = (s: string): boolean => {
+  const t = s.trim()
+  if (!t) return false
+  // Never treat ellipses as end of sentence in streaming
+  if (/\.\.\.$/.test(t)) return false
+  if (/[!?]"?$/.test(t)) return true
+  // For a trailing period, require whitespace or start before the last token
+  return /(?:^|\s)\S+\."?$/.test(t)
+}
+
 const extractSentences = (text: string): string[] => {
+  // Split by newlines first (preserves numbers like 258.93)
+  const lines = text.split(/\n+/).filter(line => line.trim().length > 0)
+  
+  // If we have multiple lines, treat only complete lines as sentences
+  if (lines.length > 1) {
+    const completeLines = lines.filter(line => isCompleteSentence(line))
+    return completeLines.map(line => line.trim())
+  }
+  
+  // If single line, then split by sentence endings
+  // But be smarter about it - require space after punctuation to avoid splitting numbers
   const sentences: string[] = []
-  const parts = text.split(/([.!?]\s+|\n+)/)
+  const parts = text.split(/([.!?]\s+)/)
   
   let current = ''
   for (let i = 0; i < parts.length; i++) {
     current += parts[i]
-    if (/[.!?]\s*$/.test(current.trim())) {
+    // Only treat as sentence boundary if we have punctuation followed by space
+    if (/[.!?]\s+$/.test(current)) {
       sentences.push(current.trim())
       current = ''
     }
   }
   
-  return sentences
+  // Do NOT queue trailing incomplete fragments – only keep if it ends with punctuation
+  if (current.trim() && isCompleteSentence(current)) {
+    sentences.push(current.trim())
+  }
+  
+  return sentences.filter(s => s.length > 0)
 }
 
 export const TTSProvider = ({ children }: { children: ReactNode }) => {

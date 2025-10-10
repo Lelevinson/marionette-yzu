@@ -8,6 +8,7 @@ import { getToolSpec } from './tool-registry'
 import { isAIModelError, isWriterAPIError } from './errors'
 import { type AlertAction, openAIFlagsPage, openWriterAPIFlagsPage } from './alert-context'
 import { useTTS } from './tts-context'
+import { storeRating } from './rating-database'
 
 // Validate UI tools on module load
 validateUITools()
@@ -374,8 +375,30 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         if (invalidFormat) {
           console.error('[PROCESSING] Invalid tool format detected:', invalidFormat)
           
-          // Instead of breaking, provide corrective feedback as a tool result and let agent retry
-          const correctionMessage = `[TOOL RESULT]\nError: ${invalidFormat}\n\nRemember the correct format:\n<function_call>{"function": "toolName", "arguments": {...}}</function_call>\n\nPlease retry using the correct format.`
+          // Check if we've already shown this error recently (prevent loops)
+          const recentMessages = state.messages.slice(-3)
+          const hasRecentFormatError = recentMessages.some(m => 
+            m.content.includes('STOP using code blocks') || 
+            m.content.includes('Invalid format detected')
+          )
+          
+          if (hasRecentFormatError) {
+            // Stop the loop - agent is stuck
+            console.error('[PROCESSING] Format error loop detected - stopping')
+            dispatch({ type: 'SET_PROCESSING', payload: false })
+            dispatch({ type: 'SET_WAITING', payload: false })
+            dispatch({ type: 'SET_IN_TOOL_LOOP', payload: false })
+            
+            const finalError = createAssistantMessage(
+              'I apologize, but I\'m having trouble with the tool format. Please try rephrasing your request or contact support.',
+              0
+            )
+            dispatch({ type: 'ADD_MESSAGE', payload: { ...finalError, id: Date.now() + '_loop_stopped' } })
+            return
+          }
+          
+          // First time showing this error - provide corrective feedback
+          const correctionMessage = `[TOOL RESULT]\nError: ${invalidFormat}`
           
           const errorResultMessage = createAssistantMessage(correctionMessage, 0)
           dispatch({ type: 'ADD_MESSAGE', payload: { ...errorResultMessage, id: Date.now() + '_formaterror' } })
@@ -730,8 +753,65 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     return contextText
   }
 
-  const rateMessage = (messageId: string, rating: 'up' | 'down') => {
+  const rateMessage = async (messageId: string, rating: 'up' | 'down') => {
+    // Update message rating in state
     dispatch({ type: 'UPDATE_MESSAGE_RATING', payload: { id: messageId, rating } })
+    
+    // Store rating with full chat context in database
+    try {
+      const systemPrompt = getFilledSystemPrompt()
+      
+      let chatContext = ''
+      
+      // Include system prompt if available
+      if (systemPrompt) {
+        chatContext += '=== SYSTEM PROMPT ===\n\n'
+        chatContext += systemPrompt
+        chatContext += '\n\n=== CONVERSATION ===\n\n'
+      }
+      
+      // Add messages with truncated media
+      chatContext += state.messages.map(msg => {
+        let content = msg.content
+        
+        // Truncate base64 images
+        if (content.includes('data:image/')) {
+          content = content.replace(
+            /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+            (match) => {
+              const preview = match.substring(0, 50)
+              return `${preview}... [IMAGE_TRUNCATED_${match.length}_CHARS]`
+            }
+          )
+        }
+        
+        // Truncate base64 audio
+        if (content.includes('data:audio/')) {
+          content = content.replace(
+            /data:audio\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+            (match) => {
+              const preview = match.substring(0, 50)
+              return `${preview}... [AUDIO_TRUNCATED_${match.length}_CHARS]`
+            }
+          )
+        }
+        
+        return `${msg.role.toUpperCase()}: ${content}`
+      }).join('\n\n')
+      
+      // Store in database
+      await storeRating({
+        messageId,
+        rating,
+        chatContext,
+        systemPrompt
+      })
+      
+      console.log('[Rating] Saved rating with chat context:', { messageId, rating })
+    } catch (error) {
+      console.error('[Rating] Error storing rating:', error)
+      // Don't fail the UI if database storage fails
+    }
   }
 
   return (

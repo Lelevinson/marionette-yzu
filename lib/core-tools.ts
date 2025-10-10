@@ -8,5 +8,8 @@ export const CORE_TOOLS = [
   'openTab',
   'findElements',
   'clickElement',
-  'fillInput'
+  'fillInput',
+  'getTabs',
+  'switchTab',
+  'listen'
 ]

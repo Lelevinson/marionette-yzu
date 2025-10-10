@@ -11,6 +11,7 @@ import storeMemory from './lib/tools/storeMemory'
 import getMemories from './lib/tools/getMemories'
 import scrollUp from './lib/tools/scrollUp'
 import scrollDown from './lib/tools/scrollDown'
+import pressKey from './lib/tools/pressKey'
 import highlightSelector from './lib/tools/highlightSelector'
 import highlightText from './lib/tools/highlightText'
 import captureCurrentPage from './lib/tools/captureCurrentPage'
@@ -18,7 +19,9 @@ import searchVault from './lib/tools/searchVault'
 import getVaultStats from './lib/tools/getVaultStats'
 import getPlaybook from './lib/tools/getPlaybook'
 import summarizePageHandler from './lib/tools/summarizePage'
-import { isValidTool } from './lib/tool-registry'
+import getTabs from './lib/tools/getTabs'
+import switchTab from './lib/tools/switchTab'
+import { isValidTool, findSimilarTools } from './lib/tool-registry'
 import { autoCapturePage } from './lib/auto-capture'
 
 // Background script for Marionette extension
@@ -58,13 +61,16 @@ const toolHandlers: Record<string, ToolHandler> = {
   getMemories,
   scrollUp,
   scrollDown,
+  pressKey,
   highlightSelector,
   highlightText,
   captureCurrentPage,
   searchVault,
   getVaultStats,
   getPlaybook,
-  summarizePage: plasmoWrapper(summarizePageHandler)
+  summarizePage: plasmoWrapper(summarizePageHandler),
+  getTabs,
+  switchTab
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -95,7 +101,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // Validate tool exists in registry
     if (!isValidTool(toolName)) {
-      sendResponse({ success: false, error: `Unknown tool: ${toolName}` })
+      const similarTools = findSimilarTools(toolName)
+      let errorMessage = `Unknown tool: ${toolName}`
+      
+      if (similarTools.length > 0) {
+        errorMessage += `\n\nDid you mean one of these?\n- ${similarTools.join('\n- ')}`
+        errorMessage += '\n\nIMPORTANT: If you tried to use a playbook name as a tool, remember that playbooks are NOT tools. You must first call getPlaybook("playbook-name") to retrieve the instructions, then follow those instructions using actual tools.'
+      }
+      
+      sendResponse({ success: false, error: errorMessage })
       return true
     }
     

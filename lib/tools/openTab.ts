@@ -6,7 +6,7 @@ async function openTab(params: { url: string }, context?: string) {
     if (context === 'popup') {
       return { 
         success: false, 
-        error: 'Cannot open tabs from popup because it would close the popup window. Tell the user to open the side panel by clicking the maximize icon in the header, then they can open tabs from there.' 
+        error: 'STOP: Cannot open tabs from popup window. Please ask the user to open Marionette in the side panel by clicking the maximize icon in the top right. Do NOT continue with the task or try other tools - just tell the user this and wait.' 
       }
     }
     

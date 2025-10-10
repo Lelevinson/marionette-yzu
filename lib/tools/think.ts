@@ -14,7 +14,7 @@ async function think(params: any) {
     
     return {
       success: true,
-      result: 'Your reasoning is noted. Now execute the next action based on your plan. Do NOT call think again - proceed directly with the required tool call or response to the user.'
+      result: 'Reasoning acknowledged. Now proceed with executing your plan using the appropriate tools.'
     }
   } catch (error: any) {
     return { success: false, error: error.message }
@@ -23,7 +23,7 @@ async function think(params: any) {
 
 export const spec: ToolSpec = {
   name: 'think',
-  description: 'State your reasoning and plan before taking action. Use this to think through the problem step-by-step.',
+  description: 'OPTIONAL: State your reasoning before complex tasks. For simple tasks, skip this and execute directly.',
   parameters: [
     {
       name: 'reasoning',
@@ -33,9 +33,9 @@ export const spec: ToolSpec = {
     }
   ],
   examples: [
-    'User: "search for weather forecast" → <function_call>{"function": "think", "arguments": {"reasoning": "Need google-search playbook. Steps: open Google, find search box, enter query, submit"}}</function_call>',
-    'Complex task → <function_call>{"function": "think", "arguments": {"reasoning": "User wants X. Plan: 1) Do A, 2) Do B, 3) Do C"}}</function_call>',
-    'Before taking action → <function_call>{"function": "think", "arguments": {"reasoning": "Based on context, I\'ll use approach A because it best matches user intent"}}</function_call>'
+    'User: "what\'s on this page?" → Just call captureScreenshot (no need to think first)',
+    'User: "search for AAPL stock price" → <function_call>{"function": "getPlaybook", "arguments": {"id": "google-search"}}</function_call> then follow instructions',
+    'User: "click submit" → Just call findElements and clickElement (no need to think first)'
   ],
   spokenLine: 'Thinking...'
 }

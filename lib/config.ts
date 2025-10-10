@@ -9,4 +9,4 @@ export type Screen = 'main' | 'debug'
  * Set to 'debug' to open the debug screen by default
  * Set to 'main' to open the main screen by default
  */
-export const DEFAULT_SCREEN: Screen = 'debug'
+export const DEFAULT_SCREEN: Screen = 'main'

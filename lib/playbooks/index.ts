@@ -2,11 +2,13 @@ import { type Playbook } from './types'
 import { searchPlaybook } from './search'
 import { emailPlaybook } from './email'
 import { formPlaybook } from './form'
+import { listenPlaybook } from './listen'
 
 export const PLAYBOOKS: Playbook[] = [
   searchPlaybook,
   emailPlaybook,
-  formPlaybook
+  formPlaybook,
+  listenPlaybook
 ]
 
 export function generatePlaybooksDocumentation(): string {

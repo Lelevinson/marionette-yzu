@@ -31,12 +31,13 @@ async function scrollDown(params: any) {
 
 export const spec: ToolSpec = {
   name: 'scrollDown',
-  description: 'Scrolls the current page down by a fixed amount',
+  description: 'Scrolls the current page down by a fixed amount. Note: Does NOT work on video feed sites like TikTok, Instagram Reels, or YouTube Shorts - use pressKey with "ArrowDown" instead for those.',
   parameters: [],
   examples: [
     'User: "scroll down" → scrollDown',
     'User: "go down" → scrollDown',
-    'User: "move down on the page" → scrollDown'
+    'User: "move down on the page" → scrollDown',
+    'User on TikTok: "scroll down" → Use pressKey with key: "ArrowDown" instead'
   ],
   spokenLine: 'Scrolling down'
 }

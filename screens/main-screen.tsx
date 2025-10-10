@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from "react"
-import { Bug, Mic, RotateCcw, Maximize2, Settings, Flag, Volume2, VolumeX } from "lucide-react"
+import { Bug, Mic, RotateCcw, Maximize2, Settings, Flag, Volume2, VolumeX, Square } from "lucide-react"
 import { useVoiceInput } from "../lib/use-voice-input"
 import { useChatContext } from "../lib/chat-context"
 import { useTTS } from "../lib/tts-context"
@@ -19,26 +19,56 @@ interface MainScreenProps {
   fullHeight?: boolean
 }
 
+// Heuristic: consider a sentence complete when it ends with ! or ?;
+// for '.' require that the token before '.' is preceded by start-of-line or whitespace
+// to avoid treating emails/URLs like "name@domain." as sentences during streaming.
+const isCompleteSentence = (s: string): boolean => {
+  const t = s.trim()
+  if (!t) return false
+  // Never treat ellipses as end of sentence in streaming
+  if (/\.\.\.$/.test(t)) return false
+  if (/[!?]"?$/.test(t)) return true
+  // For a trailing period, require whitespace or start before the last token
+  return /(?:^|\s)\S+\."?$/.test(t)
+}
+
 const getCompleteSentences = (text: string): string => {
+  // Split by newlines first (preserves numbers like 258.93)
+  const lines = text.split(/\n+/).filter(line => line.trim().length > 0)
+  
+  // If we have multiple lines, treat only complete lines as sentences
+  if (lines.length > 1) {
+    const completeLines = lines.filter(line => isCompleteSentence(line))
+    return completeLines.map(line => line.trim()).join(' ')
+  }
+  
+  // If single line, then split by sentence endings
+  // But be smarter about it - require space after punctuation to avoid splitting numbers
   const sentences: string[] = []
-  const parts = text.split(/([.!?]\s+|\n+)/)
+  const parts = text.split(/([.!?]\s+)/)
   
   let current = ''
   for (let i = 0; i < parts.length; i++) {
     current += parts[i]
-    if (/[.!?]\s*$/.test(current.trim())) {
+    // Only treat as sentence boundary if we have punctuation followed by space
+    if (/[.!?]\s+$/.test(current)) {
       sentences.push(current.trim())
       current = ''
     }
   }
   
-  return sentences.join(' ')
+  // Do NOT queue trailing incomplete fragments – only keep if it ends with punctuation
+  if (current.trim() && isCompleteSentence(current)) {
+    sentences.push(current.trim())
+  }
+  
+  return sentences.filter(s => s.length > 0).join(' ')
 }
 
 export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreenProps) => {
   const { state: onboardingState, isPopup } = useOnboarding()
   const { isListening, transcript, handleMicClick } = useVoiceInput()
-  const { state, sendMessage, resetChat, rateMessage, isInitialLoadComplete } = useChatContext()
+  const { state, sendMessage, resetChat, rateMessage, isInitialLoadComplete, interruptChat } = useChatContext()
   const { handleNewText, stop, currentSentence, isSpeaking, audioEnabled, setAudioEnabled } = useTTS()
   const [textInput, setTextInput] = useState("")
   
@@ -82,9 +112,17 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
         const toolCall = parseToolCall(msg.content)
         const textBeforeToolCall = msg.content.split('<function_call>')[0].trim()
         
+        // If message only contains function call syntax (no text before it), don't display the raw syntax
+        let displayText = textBeforeToolCall
+        if (!displayText && msg.content.includes('<function_call>')) {
+          displayText = '' // Don't show raw function call syntax
+        } else if (!displayText) {
+          displayText = msg.content // Fallback to full content only if no function call
+        }
+        
         return {
           id: msg.id,
-          text: getCompleteSentences(textBeforeToolCall || msg.content),
+          text: displayText ? getCompleteSentences(displayText) : '',
           toolCall: toolCall,
           spokenLine: toolCall ? getSpokenLine(toolCall.function, toolCall.arguments) : null,
           rating: msg.rating
@@ -104,6 +142,10 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
 
   // TTS effect - handle new text (only if it's different from what we've seen before)
   useEffect(() => {
+    // Ensure we don't trigger TTS until messages have been restored
+    if (!isInitialLoadComplete) {
+      return
+    }
     // Skip if text is same as last spoken
     if (latestResponse.text === lastSpokenTextRef.current) {
       return
@@ -118,7 +160,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       lastSpokenTextRef.current = latestResponse.spokenLine
       handleNewText(latestResponse.spokenLine)
     }
-  }, [latestResponse.text, latestResponse.spokenLine, handleNewText, stop])
+  }, [isInitialLoadComplete, latestResponse.text, latestResponse.spokenLine, handleNewText, stop])
 
   // Determine waveform state - pure event-driven, no complex conditions
   const waveformState = isListening 
@@ -151,6 +193,11 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
     } catch (error) {
       console.error('Failed to open sidepanel:', error)
     }
+  }
+
+  const handleInterrupt = () => {
+    stop() // Stop TTS immediately
+    interruptChat()
   }
 
   // Show redirect screen in popup when onboarding is needed
@@ -246,6 +293,15 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
           >
             <Mic className="w-4 h-4" />
           </button>
+          {state.isProcessing && (
+            <button
+              onClick={handleInterrupt}
+              className="p-1 hover:bg-gray-800 rounded text-red-500"
+              title="Stop response"
+            >
+              <Square className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={resetChat}
             className="p-1 hover:bg-gray-800 rounded"
