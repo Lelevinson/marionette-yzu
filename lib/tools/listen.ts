@@ -6,10 +6,13 @@ const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
     console.log("listen handler called with params:", req.body)
     
     const { seconds } = req.body
-    const duration = parseInt(seconds) || 5
-    
-    if (duration <= 0 || duration > 300) {
-      throw new Error("Duration must be between 1 and 300 seconds")
+    // Force max duration to 10 seconds regardless of input
+    let duration = parseInt(seconds) || 5
+    if (duration > 10) duration = 10
+    if (duration <= 0) duration = 5
+
+    if (duration <= 0 || duration > 10) {
+      throw new Error("Duration must be between 1 and 10 seconds")
     }
     
     const [tab] = await chrome.tabs.query({ active: true })
@@ -84,12 +87,12 @@ const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
 
 export const spec: ToolSpec = {
   name: 'listen',
-  description: 'Captures audio from the current browser tab for a specified duration',
+  description: 'Captures audio from the current browser tab for up to 10 seconds (maximum allowed duration)',
   parameters: [
     {
       name: 'seconds',
       type: 'number',
-      description: 'Duration to record in seconds (1-300, default: 5)',
+      description: 'Duration to record in seconds (1-10, default: 5, maximum: 10)',
       required: false
     }
   ],
@@ -97,6 +100,7 @@ export const spec: ToolSpec = {
   examples: [
     'User: "listen to what\'s playing" → listen with seconds: 5',
     'User: "record the audio for 10 seconds" → listen with seconds: 10',
+    'User: "record for 30 seconds" → listen with seconds: 10 (maximum allowed is 10)',
     'User: "capture the sound" → listen (uses default 5 seconds)'
   ]
 }

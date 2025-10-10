@@ -2,7 +2,7 @@ import { type Playbook } from './types'
 
 export const formPlaybook: Playbook = {
   id: 'fill-form',
-  description: 'How to fill out web forms',
+  description: 'Step-by-step guidance for filling forms on the current page',
   requiredTools: ['captureScreenshot', 'findElements', 'fillInput', 'clickElement', 'getAccessibilitySnapshot', 'scrollDown', 'scrollUp', 'storeMemory'],
   contents: `## Form Filling Workflow
 

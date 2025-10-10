@@ -1,4 +1,5 @@
 import type { ToolSpec } from '../tool-registry'
+import { generateEmbedding, cosineSimilarity } from '../embeddings'
 
 async function findElements(params: { query: string }) {
   try {
@@ -13,8 +14,7 @@ async function findElements(params: { query: string }) {
 
     const result = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: (searchQuery: string) => {
-        const query = searchQuery.toLowerCase()
+      func: () => {
         const elements: any[] = []
         let globalIndex = 0
         
@@ -82,19 +82,7 @@ async function findElements(params: { query: string }) {
             else if (tagName === 'select') role = 'combobox'
           }
           
-          // Filter by query - check role, name, tag, type (fuzzy + case insensitive)
-          const searchableText = `${role} ${accessibleName} ${htmlEl.tagName}`.toLowerCase()
-          
-          // Fuzzy matching: split query into words and check if all words appear (in any order)
-          const queryWords = query.trim().split(/\s+/)
-          const allWordsMatch = queryWords.every(word => searchableText.includes(word))
-          
-          if (!allWordsMatch) {
-            globalIndex++
-            return
-          }
-          
-          // Tag element
+          // Tag element (we'll filter semantically later)
           const dataAttr = `data-marionette-${globalIndex}`
           htmlEl.setAttribute(dataAttr, 'true')
           
@@ -118,8 +106,7 @@ async function findElements(params: { query: string }) {
         })
         
         return elements
-      },
-      args: [params.query]
+      }
     })
 
     const elements = result[0]?.result || []
@@ -127,19 +114,65 @@ async function findElements(params: { query: string }) {
     if (elements.length === 0) {
       return {
         success: true,
+        result: `No interactive elements found on this page.`
+      }
+    }
+    
+    // Use semantic embeddings to filter and rank elements
+    console.log('[findElements] Using semantic filtering with query:', params.query)
+    
+    // Generate query embedding
+    const queryEmbedding = await generateEmbedding(params.query)
+    
+    // Filter out elements with no meaningful text/name
+    const meaningfulElements = elements.filter((el: any) => {
+      const hasText = el.name && el.name.trim().length > 0
+      const isNotJustSymbol = el.name && el.name.length > 1 || el.name && !/^[×☰≡•]$/.test(el.name)
+      return hasText && isNotJustSymbol
+    })
+    
+    if (meaningfulElements.length === 0) {
+      return {
+        success: true,
+        result: `No elements with text found matching "${params.query}". Try a different query.`
+      }
+    }
+    
+    // Generate embeddings for each element and calculate similarity
+    const elementsWithSimilarity = await Promise.all(
+      meaningfulElements.map(async (el: any) => {
+        const elementText = `${el.role} ${el.name}`.trim()
+        const embedding = await generateEmbedding(elementText)
+        const similarity = cosineSimilarity(queryEmbedding, embedding)
+        return { ...el, similarity }
+      })
+    )
+    
+    // Sort by similarity (best matches first)
+    elementsWithSimilarity.sort((a, b) => b.similarity - a.similarity)
+    
+    // Take top 10 most relevant results
+    const topElements = elementsWithSimilarity.slice(0, 10)
+    
+    console.log('[findElements] Filtered to top', topElements.length, 'elements by semantic similarity')
+    
+    if (topElements.length === 0) {
+      return {
+        success: true,
         result: `No elements found matching "${params.query}".`
       }
     }
     
     // Format as readable text
-    let output = `Found ${elements.length} elements matching "${params.query}":\n\n`
+    let output = `Found ${elements.length} elements (${meaningfulElements.length} with text), showing top ${topElements.length} matches for "${params.query}":\n\n`
     
-    elements.forEach((el: any) => {
+    topElements.forEach((el: any) => {
       const disabled = el.disabled ? ' [DISABLED]' : ''
       const type = el.type ? ` (type: ${el.type})` : ''
       const href = el.href ? ` (${el.href})` : ''
+      const similarity = ` [${(el.similarity * 100).toFixed(0)}% match]`
       
-      output += `[${el.index}] ${el.role.toUpperCase()}: "${el.name}"${type}${href}${disabled}\n`
+      output += `[${el.index}] ${el.role.toUpperCase()}: "${el.name}"${type}${href}${disabled}${similarity}\n`
     })
     
     return { 
@@ -153,20 +186,21 @@ async function findElements(params: { query: string }) {
 
 export const spec: ToolSpec = {
   name: 'findElements',
-  description: 'Searches for specific interactive elements on the page by role, name, or text content. More efficient than getAccessibilitySnapshot on complex pages.',
+  description: 'Finds UI elements (buttons, inputs, links) on the page using semantic search. Returns top 10 most relevant matches ranked by similarity. Use natural language to describe what you\'re looking for.',
   parameters: [
     {
       name: 'query',
       type: 'string',
-      description: 'Search query to filter elements (e.g., "search", "submit button", "email input", "login")',
+      description: 'Natural language description of the element you\'re looking for (e.g., "first video", "submit button", "email input", "login link")',
       required: true
     }
   ],
   spokenLine: "Looking for {query}",
   examples: [
-    'User: "click the submit button" → findElements with query: "submit"',
-    'User: "find the search box" → findElements with query: "search"',
-    'When getAccessibilitySnapshot returns too many elements → use findElements to narrow down'
+    'User: "click the submit button" → findElements with query: "submit button"',
+    'User: "click first video" → findElements with query: "video" to find video links',
+    'User: "search for AI podcasts" → findElements with query: "search box" (NOT "ai podcasts"), then fillInput with "AI podcasts"',
+    'User: "type my email" → findElements with query: "email input"'
   ]
 }
 

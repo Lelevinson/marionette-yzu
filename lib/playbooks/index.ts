@@ -1,11 +1,11 @@
 import { type Playbook } from './types'
-import { searchPlaybook } from './search'
+// import { searchPlaybook } from './search'
 import { emailPlaybook } from './email'
 import { formPlaybook } from './form'
 import { listenPlaybook } from './listen'
 
 export const PLAYBOOKS: Playbook[] = [
-  searchPlaybook,
+  // searchPlaybook, // DISABLED - agent should work with current page instead
   emailPlaybook,
   formPlaybook,
   listenPlaybook

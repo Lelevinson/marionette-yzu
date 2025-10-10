@@ -2,7 +2,7 @@ import { type Playbook } from './types'
 
 export const listenPlaybook: Playbook = {
   id: 'listen-audio',
-  description: 'How to listen to and describe audio from the current page',
+  description: 'Captures and transcribes audio from the current page (videos, music, etc.)',
   requiredTools: ['captureScreenshot', 'listen'],
   contents: `## Audio Listening Workflow
 

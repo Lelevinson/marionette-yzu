@@ -11,5 +11,6 @@ export const CORE_TOOLS = [
   'fillInput',
   'getTabs',
   'switchTab',
-  'listen'
+  'listen',
+  'pressKey',
 ]

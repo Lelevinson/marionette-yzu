@@ -34,7 +34,7 @@ export const spec: ToolSpec = {
   ],
   examples: [
     'User: "what\'s on this page?" → Just call captureScreenshot (no need to think first)',
-    'User: "search for AAPL stock price" → <function_call>{"function": "getPlaybook", "arguments": {"id": "google-search"}}</function_call> then follow instructions',
+    'User: "fill out this form" → <function_call>{"function": "getPlaybook", "arguments": {"id": "fill-form"}}</function_call> then follow instructions',
     'User: "click submit" → Just call findElements and clickElement (no need to think first)'
   ],
   spokenLine: 'Thinking...'

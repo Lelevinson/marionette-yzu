@@ -1,869 +1,622 @@
-<p align="center">
-  <img src="./assets/icon.png" alt="Marionette Logo" height="128"/>
-</p>
+# Marionette
 
-<h1 align="center">Marionette</h1>
+<div align="center">
 
-<p align="center">
-  <b>Navigate and control any website using natural language, entirely offline and private.</b>
-</p>
+![Marionette Demo](./MarionetteDemo.gif)
 
-<p align="center">
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.3-blue?logo=typescript" alt="TypeScript"/></a>
-  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18.2-61dafb?logo=react" alt="React"/></a>
-  <a href="https://www.plasmo.com/"><img src="https://img.shields.io/badge/Plasmo-0.90-blueviolet?logo=data:image/svg+xml;base64,..." alt="Plasmo"/></a>
-  <a href="./LICENSE.txt"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"/></a>
-  <a href="https://chrome.google.com/webstore"><img src="https://img.shields.io/badge/Chrome-Extension-4285F4?logo=google-chrome&logoColor=white" alt="Chrome Extension"/></a>
-</p>
+**AI browser automation agent powered by Chrome's built-in Gemini Nano**
 
-![Marionette Architecture](./diagrams/marionette_architecture.png)
+![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
+![On-Device AI](https://img.shields.io/badge/AI-On--Device-00ff88)
+![Privacy First](https://img.shields.io/badge/Privacy-100%25_Offline-f59e0b)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![Transformers.js](https://img.shields.io/badge/Transformers.js-2.17-f59e0b)
+![Plasmo](https://img.shields.io/badge/Plasmo-Framework-a855f7)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Gemini Nano](https://img.shields.io/badge/Gemini-Nano-4285F4)
+![Voice Control](https://img.shields.io/badge/Voice-Enabled-00ff88)
 
-> **Note:** To generate all diagrams, run: `cd diagrams && ./generate_all.sh`
+</div>
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Setup](#setup)
+- [Design Notes](#design-notes)
+  - [Constraints & Solutions](#the-constraints)
+  - [Agent Core & Loopback](#the-agent-is-the-prompt-api)
+  - [Multimodal Capabilities](#multimodal-understanding)
+  - [Perception & Interaction](#perception-and-action-the-agent-webpage-interface)
+  - [Playbook System](#aligning-the-model-with-playbooks)
+  - [Memory & Embeddings](#embeddings-and-token-efficiency)
+  - [Agent Alignment (Parsing, Loops, Summarization)](#tool-call-format-and-parsing)
+  - [Tool Routing & Extensibility](#tool-routing-architecture)
+  - [Rating System](#response-rating-and-future-alignment)
+- [Tech Stack](#tech-stack)
+- [Contributing](#contributing)
+
+---
 
 ## Overview
 
-Marionette is a revolutionary browser extension that removes digital barriers by enabling **voice-controlled web automation** powered by Chrome's built-in **Gemini Nano AI**. Unlike traditional automation tools, Marionette runs **100% locally** on your device—no cloud APIs, no data leaving your machine, completely private.
+Marionette removes digital barriers by letting you navigate and control any website using natural language, entirely offline and private. Voice-controlled, agentic, with semantic memory.
 
-### Key Features
+**Key Features:**
+- On-device AI agent (Gemini Nano via Chrome Prompt API)
+- 22 automation tools (click, fill, scroll, capture, search)
+- Agentic loopback system (up to 60 tool iterations per task)
+- Multimodal input (text, voice, image, audio)
+- Semantic memory vault with 384D embeddings
+- Playbook-guided workflows for complex tasks
+- 100% offline, zero telemetry
 
-| Feature                        | Description                                                                                  |
-|--------------------------------|----------------------------------------------------------------------------------------------|
-| 🎤 **Voice Control**           | Navigate websites hands-free with natural language commands                                   |
-| 🧠 **On-Device AI**            | Powered by Chrome's Gemini Nano—no internet required for processing                          |
-| 🔒 **Privacy First**           | All processing happens locally; your data never leaves your device                           |
-| 🎯 **Wake Word Detection**     | Hands-free activation with "Hey Marionette" using Picovoice Porcupine                       |
-| 🗄️ **Semantic Memory Vault**   | Store and search web pages using AI-powered embeddings (384D vectors)                        |
-| 🤖 **Smart Playbooks**         | Pre-built workflows for complex tasks (search, email, etc.)                                  |
-| 🔧 **22+ Automation Tools**    | Click, fill, scroll, translate, screenshot, and more                                         |
-| 🌐 **Multilingual Support**    | Text-to-speech in multiple languages and voices                                              |
-| ⚡ **Real-time Streaming**     | See AI responses as they're generated                                                        |
+---
 
-## Visual Diagrams
+## Setup
 
-Marionette includes comprehensive visual documentation. All diagrams can be generated using Python scripts in the `diagrams/` directory.
+### Prerequisites
 
-### Architecture Overview
-![Architecture Overview](./diagrams/marionette_architecture.png)
+### Enable Chrome Flags
 
-### AI Processing Flow
-![AI Processing Flow](./diagrams/ai_processing_flow.png)
+Open `chrome://flags` and enable these flags, then **restart Chrome**:
 
-### Memory Vault Workflow
-![Memory Vault](./diagrams/memory_vault_workflow.png)
+**Required:**
+- `#prompt-api-for-gemini-nano-multimodal-input` → **Enabled**
+- `#optimization-guide-on-device-model` → **Enabled BypassPerfRequirement**
 
-### Tool Execution Flow
-![Tool Execution](./diagrams/tool_execution_flow.png)
+**Recommended:**
+- `#summarization-api-for-gemini-nano` → **Enabled**
+- `#writer-api-for-gemini-nano` → **Enabled**
 
-### Playbook System
-![Playbook System](./diagrams/playbook_system.png)
+**Optional:**
+- `#translation-api` → **Enabled** (if using translateText tool)
+- `#language-detection-api` → **Enabled** (if using detectLanguage tool)
 
-**To generate diagrams:** See [diagrams/README.md](./diagrams/README.md) for instructions.
+### Join Early Preview Program
 
-## Architecture
+Chrome's built-in AI is in early preview. For best results, join the [Chrome AI Early Preview Program](https://developer.chrome.com/docs/ai/join-epp) to get early access to model updates and new capabilities.
 
-```
-marionette/
-├── popup.tsx                    # Extension popup UI (main entry)
-├── sidepanel.tsx               # Side panel UI (full-height mode)
-├── content.ts                  # Content script (page interaction)
-├── background.ts               # Service worker (message handling)
-│
-├── screens/
-│   ├── main-screen.tsx         # Voice interface & waveform UI
-│   └── debug-screen.tsx        # Developer debugging tools
-│
-├── lib/
-│   ├── ai.ts                   # Gemini Nano integration
-│   ├── embeddings.ts           # Transformers.js (all-MiniLM-L6-v2)
-│   ├── vault.ts                # IndexedDB semantic search
-│   ├── use-voice-input.ts      # Speech recognition hook
-│   ├── use-speech-recognition.ts
-│   ├── tts-context.tsx         # Text-to-speech provider
-│   ├── chat-context.tsx        # AI conversation state
-│   ├── system-prompt.ts        # AI system instructions
-│   ├── tool-registry.ts        # Tool definitions & docs
-│   ├── core-tools.ts           # Core tool set
-│   └── playbooks/              # Pre-built workflows
-│       ├── search.ts           # Google search playbook
-│       ├── email.ts            # Gmail email playbook
-│       └── types.ts
-│
-├── tools/         # Background message handlers
-│   ├── captureScreenshot.ts
-│   ├── clickElement.ts
-│   ├── findElements.ts
-│   ├── fillInput.ts
-│   ├── getAccessibilitySnapshot.ts
-│   ├── searchVault.ts
-│   ├── storeMemory.ts
-│   ├── translateText.ts
-│   ├── writeContent.ts
-│   └── ... (22+ tools total)
-│
-├── components/
-│   ├── waveform.tsx            # Animated voice waveform
-│   ├── mic-selector.tsx        # Microphone device picker
-│   └── voice-selector.tsx      # TTS voice picker
-│
-└── assets/
-    ├── Hey-Marionette_en_wasm_v3_0_0.ppn  # Wake word model
-    ├── porcupine_params.pv                # Porcupine parameters
-    ├── dom-to-semantic-markdown.js        # DOM to markdown
-    └── Readability.js                     # Article extraction
-```
+### Installation
 
-## Technology Stack
-
-### Core Technologies
-
-| Category                  | Technology                    | Purpose                                                      |
-|---------------------------|-------------------------------|--------------------------------------------------------------|
-| **Framework**             | Plasmo 0.90                   | Modern browser extension framework                           |
-| **UI Library**            | React 18.2                    | Component-based UI                                           |
-| **Language**              | TypeScript 5.3                | Type-safe development                                        |
-| **Styling**               | Tailwind CSS 3.4              | Utility-first CSS                                            |
-| **State Management**      | Zustand 5.0                   | Lightweight state management                                 |
-
-### AI & Machine Learning
-
-| Technology                          | Purpose                                                               |
-|-------------------------------------|-----------------------------------------------------------------------|
-| **Chrome Gemini Nano**              | On-device large language model (via Chrome Built-in AI APIs)         |
-| **Transformers.js (Xenova)**        | Browser-based ML inference for embeddings                            |
-| **all-MiniLM-L6-v2**                | 384-dimensional sentence embeddings for semantic search              |
-| **Picovoice Porcupine**             | Wake word detection ("Hey Marionette")                               |
-
-### Speech & Audio
-
-| Technology                          | Purpose                                                               |
-|-------------------------------------|-----------------------------------------------------------------------|
-| **Web Speech API**                  | Voice input transcription                                            |
-| **Chrome TTS API**                  | Text-to-speech output                                                |
-| **Howler.js**                       | Audio playback control                                               |
-
-### Data & Storage
-
-| Technology                          | Purpose                                                               |
-|-------------------------------------|-----------------------------------------------------------------------|
-| **IndexedDB**                       | Local semantic memory vault storage                                  |
-| **Chrome Storage API**              | Extension settings and conversation history                          |
-
-### Utilities
-
-| Technology                          | Purpose                                                               |
-|-------------------------------------|-----------------------------------------------------------------------|
-| **Turndown**                        | HTML to Markdown conversion                                          |
-| **Mozilla Readability**             | Article content extraction                                           |
-| **i18next**                         | Internationalization support                                         |
-| **Radix UI**                        | Accessible UI components                                             |
-| **Framer Motion / GSAP / Anime.js** | Smooth animations                                                    |
-
-## Requirements
-
-### System Requirements
-
-- **Browser**: Chrome 127+ (Dev/Canary with AI features)
-- **OS**: Windows, macOS, or Linux
-- **RAM**: 4GB+ recommended
-- **Storage**: 500MB+ for AI models
-
-### Chrome AI Setup (Required)
-
-Marionette uses Chrome's **experimental Built-in AI APIs**. Follow these steps:
-
-#### 1. Install Chrome Dev/Canary
-
-Download from: https://www.google.com/chrome/dev/ or https://www.google.com/chrome/canary/
-
-#### 2. Enable AI Flags
-
-Navigate to `chrome://flags` and enable:
-
-```
-✅ Prompt API for Gemini Nano          → Enabled
-✅ Summarization API for Gemini Nano   → Enabled  
-✅ Translation API                     → Enabled
-✅ Language Detection API              → Enabled
-```
-
-Relaunch Chrome after enabling flags.
-
-#### 3. Download Gemini Nano Model
-
-Open DevTools Console on any page and run:
-
-```javascript
-await ai.languageModel.create()
-```
-
-Wait for the model to download (~1.7GB). This happens once.
-
-#### 4. Verify Installation
-
-Check model availability:
-
-```javascript
-const availability = await ai.languageModel.capabilities()
-console.log(availability) // Should show: "readily"
-```
-
-**⚠️ Important**: Without completing these steps, Marionette will show "AI Model Not Available" errors.
-
-## Installation
-
-### Option 1: Install from Source (Recommended for Development)
+**Option 1: Build from source**
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/yourusername/marionette.git
 cd marionette
 
-# Install dependencies (using pnpm)
+# Install dependencies
 pnpm install
 
-# Build for development
+# Build extension
+pnpm build
+
+# Load in Chrome
+# 1. Go to chrome://extensions
+# 2. Enable "Developer mode"
+# 3. Click "Load unpacked"
+# 4. Select the build/chrome-mv3-dev directory
+```
+
+**Option 2: Chrome Web Store** *(coming soon)*
+
+### First Run
+
+1. Click the Marionette icon in your toolbar
+2. Complete the onboarding flow:
+   - **Welcome** - Introduction to capabilities
+   - **Model Availability** - Extension checks if Gemini Nano is available
+     - If not, provides direct links to enable required flags
+   - **Microphone Permission** - Grant permission for voice input
+   - **Purpose Selection** - Customize experience
+3. Start using the agent!
+
+The onboarding actively guides you through flag setup with clickable buttons that open the correct chrome://flags pages. If models aren't available, you'll get specific instructions on what to enable.
+
+---
+
+## Design Notes
+
+We built Marionette to run a capable AI agent entirely on-device, which meant working around some tight constraints while keeping things snappy and reliable.
+
+![System Architecture](./diagrams/Marionette%20Diagram.png)
+
+### The Constraints
+
+Gemini Nano is small and private, but that means limited reasoning power—it needs clear guidance to stay on track. The 9,216-token context window is a hard limit, so we have to save most of it for the actual conversation and tool outputs. And we can't just dump every tool into the prompt at once; that would overwhelm the model and waste tokens on irrelevant details.
+
+### Our Solutions
+
+The system prompt stays minimal by design. We expose a small core toolset—enough to perceive the page (captureScreenshot), navigate (openTab, switchTab), discover elements (findElements), and perform basic actions (clickElement, fillInput, listen). When complexity increases, the model can request domain-specific context by calling getPlaybook("task"), which provides relevant knowledge and unlocks specialized tools for that domain.
+
+The agentic loop is straightforward: after each tool execution, we return the result with [TOOL RESULT] and let the model decide the next step. This continues until the task completes or the model determines it's done—no hardcoded branching, just repeated observation and action.
+
+### The Agent Is the Prompt API
+
+At the heart is Chrome's Prompt API running Gemini Nano. It takes multimodal inputs—text, images from screenshots, audio clips—and streams back responses. We scan those for tool calls, execute them, and loop the results back in. It's a simple cycle: input → think → act → observe → repeat.
+
+![Agent Loop](./diagrams/agent_loop.png)
+
+### Multimodal Understanding
+
+The agent processes information across four modalities, enabling richer context and more accurate responses:
+
+| Modality | Input Source | Format | Use Case |
+|----------|--------------|--------|----------|
+| Text | User typing, tool results | String | Commands, queries, form data |
+| Voice | Web Speech API | Transcribed text | Hands-free control, dictation |
+| Image | captureScreenshot | Blob (JPEG/PNG) | Visual verification, "what do you see?" |
+| Audio | listen tool (tab audio) | Blob (audio data) | "Describe this podcast", "What's playing?" |
+
+When a tool returns an image (screenshot) or audio (recording), we convert it to a blob and send it alongside the next prompt. The model receives both the text message and the media, enabling responses like "I see a login form with two fields" or "The audio contains a discussion about React hooks." This multimodal fusion happens transparently—the agent doesn't distinguish between text-only and media-enhanced prompts.
+
+### Perception and Action: The Agent-Webpage Interface
+
+The agent constructs a mental model of each webpage through multiple perception channels, then acts through DOM manipulation primitives. This bidirectional interface enables autonomous navigation and task completion.
+
+**Perception Channels:**
+
+| Channel | Tool | What It Captures | Agent Uses It To |
+|---------|------|------------------|------------------|
+| Visual | captureScreenshot | Rendered pixels, layout, colors | Understand spatial relationships, verify actions |
+| Structural | Accessibility Tree | Interactive elements, roles, labels | Discover clickable targets, form inputs |
+| Semantic | Readability.js | Clean content, article text | Extract meaning, answer questions |
+| Contextual | Page metadata | Title, URL, timestamp | Orient in navigation flow, track state |
+| Query | findElements | Indexed element references | Locate specific UI components by description |
+
+![Agent Perception](./diagrams/agent_perception.png)
+
+**Interaction Primitives:**
+
+| Primitive | Parameters | DOM Operation | Use Case |
+|-----------|-----------|---------------|----------|
+| clickElement | index | element.click() | Buttons, links, submit actions |
+| fillInput | index, value | element.value = X | Form fields, search boxes, text areas |
+| scrollUp/Down | amount | window.scrollBy() | Long pages, infinite scroll, reveal content |
+| pressKey | key | KeyboardEvent dispatch | Enter to submit, Escape to close, Tab to navigate |
+
+![Agent Interaction](./diagrams/agent_interaction.png)
+
+Element indices come from findElements, which queries the accessibility tree by natural language ("search button", "email input"). The agent receives numbered references like `[12] Button: "Submit"` and uses that index for precise targeting. This indirection layer prevents ambiguity—no guessing at selectors or XPaths.
+
+### Aligning the Model with Playbooks
+
+The small model needs domain context to behave reliably—understanding task patterns, knowing which tools are available, and recognizing common workflows. We can't rely on a massive prompt; instead, when a complex task like "fill this form" comes up, the agent can fetch a playbook. That's domain-specific context: common patterns, available specialized tools, best practices, and what to expect. The agent still decides autonomously—playbooks provide knowledge, not instructions. They align the model for that domain, loading just what's needed without prescribing exact steps.
+
+**Context Savings with Playbooks:**
+
+| Approach | Tools in Prompt | Est. Tokens Used | Available for Conversation |
+|----------|----------------|------------------|----------------------------|
+| All tools exposed | 22 tools | ~2,400 tokens | 6,816 tokens (74%) |
+| Core + playbooks | 9 core tools | ~850 tokens | 8,366 tokens (91%) |
+
+By deferring specialized tools to playbooks, we reclaim ~1,550 tokens—roughly an extra 1,200 words of conversation history or tool results.
+
+![Playbook System](./diagrams/playbook_system.png)
+
+### Embeddings and Token Efficiency
+
+We use Transformers.js with the all-MiniLM-L6-v2 model to generate 384-dimensional embeddings for both user memories and captured web pages. This is perfect for a small model: instead of dumping raw text into the prompt, we search semantically and return only the relevant snippets.
+
+**Token Savings with Semantic Search:**
+
+| Approach | Example: "What did I read about React hooks?" | Tokens Used |
+|----------|----------------------------------------------|-------------|
+| Dump raw pages | Include full text of 3-5 relevant articles | 4,000-8,000 tokens |
+| Semantic search | Return titles, URLs, excerpts (top 3 matches) | 150-300 tokens |
+
+A single large article (5,000 words) would consume ~6,500 tokens if included raw. With embeddings, we return a 50-word excerpt plus metadata, costing ~80 tokens. The model gets the information it needs without drowning in text.
+
+### Conversation Summarization
+
+When the chat history approaches 80% of the context window (~7,300 tokens), we trigger Chrome's Summarizer API with a tuned prompt that preserves tool usage patterns, user preferences, and task state. The summarized history replaces the old messages, giving the model enough information to continue without losing critical context.
+
+**Our summarization prompt:**
+
+> Create a concise summary focusing on:
+> 1. What task the user originally requested (e.g., "fill this form")
+> 2. What specific actions the AI has already completed with exact details:
+>    - List EACH form field that was filled with its index number and value (e.g., "Filled [12] First Name: John", "Filled [13] Last Name: Smith")
+>    - Include which buttons were clicked, which pages were opened, etc.
+> 3. What data the user has provided that hasn't been filled yet (list the exact values for each remaining field)
+> 4. What fields remain to be filled (list field names with their index numbers from the accessibility snapshot)
+> 5. What the IMMEDIATE next action should be (e.g., "Call fillInput for index 14 with email value")
+>
+> CRITICAL: Preserve ALL field indices, names, and user-provided values. Include the complete list of remaining fillInput calls needed.
+
+After summarization, we prepend instructions to the agent:
+
+> **[CONTEXT SUMMARIZED - Previous conversation]**
+>
+> [summary here]
+>
+> ---
+>
+> IMPORTANT: You are in the middle of a task. Based on the summary above:
+> - IMMEDIATELY execute the next fillInput call with the exact index and value from the summary
+> - DO NOT call think again
+> - DO NOT ask for confirmation
+> - DO NOT ask the user to repeat information they already provided
+> - DO NOT restart the task from the beginning
+> - Just make the next fillInput call right now, then continue with the remaining fields
+
+This alignment ensures the agent doesn't lose track mid-task or ask users to repeat information.
+
+![Summarization Flow](./diagrams/summarization.png)
+
+### Memory Setup
+
+Memory comes in two flavors for different needs. Short user facts (like "email is john@example.com") go into agent memory in Chrome storage, with optional embeddings for quick semantic lookup. Webpage captures get cleaned with Readability.js, embedded via Transformers.js, and stashed in IndexedDB for cosine-similarity searches. The prompt pulls in agent memory summaries; vault queries happen on-demand with searchVault.
+
+### Auto-Capture Vault System
+
+Every time you navigate to a new page, the extension waits three seconds for the page to settle, then automatically captures it in the background. We inject Readability.js to extract clean content—stripping ads, navigation, and cruft—and pass the text to Transformers.js running the all-MiniLM-L6-v2 model. It generates a 384-dimensional embedding in 100-300ms, which we store alongside the URL, title, timestamp, and content in IndexedDB. This happens silently; you don't notice it.
+
+When the agent needs information—"What did I read about React hooks?"—it calls searchVault("React hooks"), which generates an embedding for the query and performs cosine similarity search across all stored entries. Results above 30% similarity are returned, ranked by relevance. The agent gets back the URLs, titles, excerpts, and similarity scores—not the full content. It can describe what you read, when, and point you to the source. This is semantic search done right: the agent finds by meaning, not keyword matching.
+
+The vault grows indefinitely (IndexedDB has no practical storage limit in extensions), though we could add cleanup logic later. For now, the assumption is: more history is better.
+
+![Semantic Vault](./diagrams/semantic_vault.png)
+
+### Privacy and Security
+
+Everything runs offline. Gemini Nano executes entirely on-device via Chrome's Prompt API—no network calls, no telemetry, no cloud inference. The all-MiniLM-L6-v2 embedding model loads from Transformers.js and runs locally in the browser. Your conversation history, captured pages, and embeddings never leave your machine.
+
+IndexedDB security is sandboxed to the extension origin. No website can access the vault; no other extension can read it. Only this extension, running in your browser, has access. If you uninstall the extension, the data is purged. It's as private as it gets: local storage, local models, local execution. The trade-off is performance (inference takes 1-3 seconds), but the gain is absolute privacy.
+
+### Tool Call Format and Parsing
+
+The model outputs tool calls in a strict XML-like format: `<function_call>{"function": "toolName", "arguments": {...}}</function_call>`. We parse this aggressively, looking for common mistakes small models make—missing closing braces, using code blocks instead of raw tags, forgetting the arguments field. When we detect malformed syntax (like wrapping the call in ```json or ```tool_code), we return an error message that explicitly tells the agent what went wrong and how to fix it.
+
+**Example format error correction:**
+
+> STOP using code blocks! Just write this directly (no backticks, no code blocks):
+>
+> `<function_call>{"function": "findElements", "arguments": {"query": "email"}}</function_call>`
+>
+> Do NOT write: \`\`\`tool_code or \`\`\`json or \`\`\`function_call
+> Just write the <function_call> directly in your response.
+
+This corrective feedback loop is essential: Nano's small size means it occasionally forgets the format mid-conversation, especially after long tool chains. We catch it immediately and guide it back on track.
+
+### Detecting and Breaking Loops
+
+Small models can get stuck. The agent might call captureScreenshot three times in a row, or cycle through findElements → clickElement → findElements without making progress. We track recent tool calls and detect two patterns: identical tools repeated three consecutive times, or cyclic sequences (A → B → C → A → B → C). When either pattern emerges, we inject a warning as a tool result.
+
+**Example loop detection warning:**
+
+> **[TOOL RESULT]**
+>
+> LOOP DETECTED: You've called captureScreenshot three times in a row. Stop calling tools and describe what you've learned from the previous screenshots.
+
+Or for cyclic patterns:
+
+> **[TOOL RESULT]**
+>
+> LOOP DETECTED: You're repeating the same sequence of tools (findElements, clickElement, findElements) without making progress. Stop calling tools and provide your final answer based on the information you already have.
+
+The model reads this, understands it's stuck, and pivots to a text response instead of continuing the loop. It's not perfect, but it works surprisingly well—most loops break on the first warning.
+
+We monitor improvements to the Nano API closely. As the model gets better at reasoning and following instructions, we can gradually remove these guardrails. But for now, they're necessary to keep the agent reliable and prevent frustrating dead ends.
+
+### Tool Routing Architecture
+
+Not all tools execute the same way. Most tools—navigation, DOM manipulation, memory operations—run in the background service worker via chrome.runtime.sendMessage. We validate the tool name against a registry, dispatch to the appropriate handler, and return the result. Simple and fast.
+
+But some tools require a user gesture (like writeContent, which uses Chrome's Writer API). These can't run in the background; they need to execute in the UI context where user interaction just happened. We flag these tools with requiresUserGesture: true and route them to a separate executeUITool pipeline that runs directly in the popup or sidepanel. The agent doesn't know or care about this distinction—it calls the tool, we handle the routing, and the result comes back the same way.
+
+Other tools, like listen or captureScreenshot, need content script injection to access the page or tab media. We check the context, inject scripts if needed, execute, and clean up. The routing layer abstracts all this complexity: from the agent's perspective, every tool is just a function call with a JSON result.
+
+![Tool Routing](./diagrams/tool_routing.png)
+
+### Extensibility and Modularity
+
+The architecture is designed for easy extension. Adding new capabilities requires minimal changes:
+
+**Adding a New Tool:**
+
+1. Create `lib/tools/myTool.ts` with an async handler function
+2. Export a `ToolSpec` describing parameters, examples, and usage
+3. Register it in `background.ts` tool handlers
+4. Optionally add to `lib/core-tools.ts` for default exposure, or leave for playbook-only use
+
+**Adding a New Playbook:**
+
+1. Create `lib/playbooks/myWorkflow.ts` with domain context and common patterns
+2. List available specialized tools and provide usage examples
+3. Export and register in `lib/playbooks/index.ts`
+4. Agent can now call `getPlaybook("myWorkflow")` to load domain knowledge
+
+**Architecture Benefits:**
+
+- **Decoupled tools**: Each tool is self-contained with its own spec, handler, and error handling
+- **Lazy loading**: Tools not in the core set only load when a playbook requests them
+- **Central registry**: `tool-registry.ts` auto-aggregates all tool specs from imports
+- **Context-aware routing**: Background vs UI vs content script execution determined by flags, not hardcoded paths
+- **Graceful degradation**: Tools return structured errors that guide the agent toward alternatives
+
+This modularity means new automation capabilities can be added without touching the agent core, system prompt, or execution loop. The playbook system further isolates complexity—a new domain doesn't require new tools, just contextual knowledge that helps the agent leverage existing primitives effectively.
+
+### Response Rating and Future Alignment
+
+Every agent response includes thumbs up/down buttons. When you rate a message, we capture the entire context: the full conversation history, the system prompt that was active, and the tool calls that were made. This data goes into a local IndexedDB (separate from the vault), indexed by timestamp and rating type.
+
+**What We Store:**
+
+| Field | Content | Purpose |
+|-------|---------|---------|
+| messageId | Unique message identifier | Link rating to specific response |
+| rating | 'up' or 'down' | Quality signal |
+| chatContext | Full conversation + system prompt | Understand what led to this response |
+| systemPrompt | Tool docs + memories at that moment | Capture the agent's "view" |
+| timestamp | When the rating occurred | Track improvement over time |
+
+Right now, this data stays local—it's purely for debugging and understanding failure modes. But the structure enables future improvements:
+
+- **Preference learning**: Extract patterns from positively-rated interactions to bias tool selection
+- **Prompt refinement**: Analyze highly-rated conversations to optimize system prompt phrasing
+- **Playbook optimization**: Identify which playbook patterns cause confusion (low ratings) and improve context
+- **Few-shot examples**: Use top-rated interactions as in-context examples for similar tasks
+- **Error pattern analysis**: Cluster negatively-rated responses to find systematic failures (format errors, loops, hallucinations)
+
+If Chrome ever supports on-device fine-tuning or preference alignment APIs, we have a curated dataset ready. Until then, the ratings help us manually iterate on prompts and playbooks based on real usage patterns.
+
+### Chrome Extension Scope and Limitations
+
+Chrome extensions have broad but not unlimited capabilities. We can capture screenshots, inject content scripts to manipulate the DOM, read accessibility trees, and switch tabs. But there are boundaries: the listen tool (for capturing page audio) only works in the sidepanel context, not the popup, due to Chrome's media capture restrictions. When the agent tries to call listen from the wrong context, the tool returns an error with clear instructions—"tell the user to open the sidepanel"—so the model can relay that requirement naturally. We design tools to fail gracefully with actionable messages, aligning the model's behavior with what's actually possible.
+
+---
+
+## Tech Stack
+
+| Category | Technology | Purpose |
+|----------|-----------|---------|
+| Framework | Plasmo | Chrome extension framework with React support |
+| Package Manager | pnpm | Fast, efficient dependency management |
+| Language | TypeScript 5.3 | Type-safe development |
+| UI | React + Tailwind CSS | Component-based interface with utility styling |
+| State | Zustand | Lightweight state management |
+| AI | Chrome Prompt API | On-device Gemini Nano inference |
+| Embeddings | Transformers.js | In-browser ML (all-MiniLM-L6-v2) |
+| Storage | IndexedDB | Semantic vault, rating database |
+| Voice | Web Speech API | Voice input transcription |
+| Wake Word | Porcupine | "Hey Marionette" detection |
+| Content Extraction | Readability.js | Clean webpage content |
+| Build | esbuild (via Plasmo) | Fast bundling and hot reload |
+
+---
+
+## Contributing
+
+Contributions welcome! Here's how to get started.
+
+### Codebase Structure
+
+```
+marionette/
+├── background.ts           # Service worker, tool routing, message handling
+├── content.ts              # Content script injected into webpages
+├── popup.tsx               # Quick access popup UI
+├── sidepanel.tsx           # Full-height side panel UI
+├── lib/
+│   ├── ai.ts               # Prompt API integration, streaming, multimodal
+│   ├── chat-context.tsx    # Agent loop state, loopback logic, summarization
+│   ├── embeddings.ts       # Transformers.js, cosine similarity
+│   ├── vault.ts            # Semantic vault (IndexedDB)
+│   ├── tools.ts            # Tool parsing and execution
+│   ├── tool-registry.ts    # Central tool registry, validation
+│   ├── core-tools.ts       # Tools exposed in system prompt by default
+│   ├── ui-tools.ts         # Tools requiring user gesture (Writer, Summarizer)
+│   ├── playbooks/          # Workflow guides (form, search, email, listen)
+│   ├── tools/              # Individual tool implementations (22 tools)
+│   └── prompts/            # System prompt, summarization prompts
+├── components/             # React components
+│   ├── onboarding/         # First-run experience, model checks
+│   ├── waveform.tsx        # Voice input visualization
+│   └── ...
+└── diagrams/               # Architecture diagrams (Python + Graphviz)
+```
+
+### Adding a New Tool
+
+Tools are self-contained modules with a handler function and a spec describing their interface.
+
+**1. Create the tool file:**
+
+```typescript
+// lib/tools/myTool.ts
+import type { ToolSpec } from '../tool-registry'
+
+async function myTool(params: any) {
+  const { arg1, arg2 } = params
+  
+  // Validation
+  if (!arg1) {
+    return { success: false, error: 'arg1 is required' }
+  }
+  
+  // Implementation
+  try {
+    const result = await doSomething(arg1, arg2)
+    return { success: true, result: result }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
+export const spec: ToolSpec = {
+  name: 'myTool',
+  description: 'Brief description of what this tool does',
+  parameters: [
+    {
+      name: 'arg1',
+      type: 'string',
+      description: 'What arg1 represents',
+      required: true
+    },
+    {
+      name: 'arg2',
+      type: 'number',
+      description: 'What arg2 represents',
+      required: false
+    }
+  ],
+  examples: [
+    'User: "do something" → myTool with arg1: "value"',
+    'Useful in workflow X when Y happens'
+  ],
+  spokenLine: 'Doing the thing'  // What agent "says" when executing
+}
+
+export default myTool
+```
+
+**2. Register in background.ts:**
+
+```typescript
+import myTool from './lib/tools/myTool'
+
+const toolHandlers: Record<string, ToolHandler> = {
+  // ... existing tools
+  myTool
+}
+```
+
+**3. Add to core tools (optional):**
+
+If this tool should be available by default (not gated by playbooks), add it to `lib/core-tools.ts`:
+
+```typescript
+export const CORE_TOOLS = [
+  'think',
+  'getPlaybook',
+  // ... existing
+  'myTool'  // Add here
+]
+```
+
+Otherwise, leave it out and reference it in a playbook.
+
+### Adding a New Playbook
+
+Playbooks provide domain context and specialized tools—the agent still decides autonomously.
+
+**1. Create the playbook:**
+
+```typescript
+// lib/playbooks/myWorkflow.ts
+import { type Playbook } from './types'
+
+export const myWorkflowPlaybook: Playbook = {
+  id: 'my-workflow',
+  description: 'Domain context for workflow tasks',
+  requiredTools: ['tool1', 'tool2', 'tool3'],
+  contents: `## Workflow Domain Context
+
+You've loaded context for workflow automation tasks.
+
+AVAILABLE SPECIALIZED TOOLS:
+- tool1: Used for X operations. Example: tool1({param: "value"})
+- tool2: Handles Y scenarios. Best when Z conditions exist.
+- tool3: Retrieves W data. Returns structured JSON.
+
+COMMON PATTERNS IN THIS DOMAIN:
+- Tasks typically require tool1 first to establish state
+- tool2 responses often contain field indices for further interaction
+- Users expect status updates for long operations
+- Error states can usually be recovered by retrying with adjusted params
+
+BEST PRACTICES:
+- Wait for each tool result before deciding next action
+- Use actual values from results, never placeholders
+- If uncertain, use think() to reason about next step
+- Explain your reasoning to the user when making key decisions
+
+You decide how to approach the task autonomously using this context.`
+}
+```
+
+**2. Register the playbook:**
+
+```typescript
+// lib/playbooks/index.ts
+import { myWorkflowPlaybook } from './myWorkflow'
+
+export const PLAYBOOKS: Playbook[] = [
+  searchPlaybook,
+  emailPlaybook,
+  formPlaybook,
+  listenPlaybook,
+  myWorkflowPlaybook  // Add here
+]
+```
+
+**3. Agent can now load it:**
+
+User: "Do the workflow"
+Agent: `getPlaybook("my-workflow")` → receives domain context → decides autonomously
+
+### Key Files to Understand
+
+**Agent Loop (`lib/chat-context.tsx`):**
+- The `sendMessage` function contains the entire agentic loop
+- Streams response from Prompt API
+- Parses for tool calls
+- Executes tools and feeds results back
+- Detects infinite loops and format errors
+- Handles summarization triggers
+
+**Tool Execution (`lib/tools.ts`):**
+- `parseToolCall` - Extracts function name and arguments, fixes common mistakes
+- `detectInvalidToolFormat` - Catches code blocks and wrong syntax
+- `executeTool` - Routes to background worker via chrome.runtime.sendMessage
+
+**System Prompt (`lib/prompts/system-prompt.ts`):**
+- Template with placeholders: `{{TOOLS}}`, `{{MEMORIES}}`, `{{CURRENT_CONTEXT}}`
+- Filled at runtime with tool docs, stored memories, current page info
+- Injected into Prompt API at session creation
+
+**Tool Registry (`lib/tool-registry.ts`):**
+- Auto-aggregates tool specs from imports
+- Provides `isValidTool` and `findSimilarTools` for validation
+- Separates UI tools (requiresUserGesture) from background tools
+
+### Development Workflow
+
+```bash
+# Start dev server with hot reload
 pnpm dev
 
 # Build for production
 pnpm build
-
-# Create distributable package
-pnpm package
 ```
 
-### Option 2: Load as Unpacked Extension
-
-1. Build the extension: `pnpm build`
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable **Developer mode** (top-right toggle)
-4. Click **Load unpacked**
-5. Select the `build/chrome-mv3-dev` (or `chrome-mv3-prod`) folder
-
-### Option 3: Chrome Web Store (Coming Soon)
-
-Installation will be available via Chrome Web Store once published.
-
-## Quick Start
-
-### 1. Grant Permissions
-
-On first launch, grant the following permissions:
-
-- ✅ **Microphone** - For voice input
-- ✅ **Tab access** - For web automation
-- ✅ **Storage** - For memory vault
-
-### 2. Select Audio Devices
-
-- Click the microphone icon to choose your input device
-- Click the speaker icon to choose TTS voice
-
-### 3. Start Using Voice Commands
-
-**Option A: Click to Talk**
-1. Click the microphone button
-2. Speak your command
-3. Click again to stop and process
-
-**Option B: Wake Word** (Coming Soon)
-1. Say "Hey Marionette"
-2. Speak your command
-3. AI processes automatically
-
-### 4. Try Text Input
-
-Type commands in the input field and press Enter:
-- "Search for weather in Tokyo"
-- "Open Gmail"
-- "Find the subscribe button"
-
-## Usage Examples
-
-### Example 1: Web Search
-
-**Voice Command:**
-```
-"Search Google for best restaurants in Paris"
-```
-
-**What Happens:**
-1. Opens Google.com
-2. Finds search input
-3. Types "best restaurants in Paris"
-4. Clicks search button
-5. Captures screenshot
-6. Describes results
-
-### Example 2: Email Automation
-
-**Voice Command:**
-```
-"Send an email to john@example.com about meeting tomorrow"
-```
-
-**What Happens:**
-1. Opens Gmail
-2. Clicks compose
-3. Fills recipient
-4. AI drafts email content
-5. Fills subject and body
-6. Sends email
-
-### Example 3: Memory Storage
-
-**Voice Command:**
-```
-"Remember this page"
-```
-
-**What Happens:**
-1. Extracts page content
-2. Generates 384D embedding
-3. Stores in IndexedDB vault
-4. Enables semantic search
-
-### Example 4: Semantic Search
-
-**Voice Command:**
-```
-"What did I read about machine learning?"
-```
-
-**What Happens:**
-1. Generates query embedding
-2. Searches vault using cosine similarity
-3. Returns relevant pages (>30% similarity)
-4. Summarizes findings
-
-## Available Tools (22 Total)
-
-### Core Navigation Tools
-
-| Tool                   | Description                                      | Example Usage                                    |
-|------------------------|--------------------------------------------------|--------------------------------------------------|
-| `openTab`              | Open URL in new tab                              | `openTab("https://example.com")`                 |
-| `findElements`         | Find interactive elements on page                | `findElements("search button")`                  |
-| `clickElement`         | Click element by index                           | `clickElement(5)`                                |
-| `fillInput`            | Fill input field                                 | `fillInput(3, "hello world")`                    |
-| `scrollDown/Up`        | Scroll page                                      | `scrollDown()`                                   |
-
-### Content Capture Tools
-
-| Tool                     | Description                                    | Example Usage                                    |
-|--------------------------|------------------------------------------------|--------------------------------------------------|
-| `captureScreenshot`      | Take page screenshot                           | Returns base64 image data                        |
-| `captureCurrentPage`     | Extract page content as markdown               | Returns clean text content                       |
-| `getAccessibilitySnapshot` | Get accessibility tree                       | Returns structured page elements                 |
-| `getPageTitle`           | Get current page title                         | Returns document title                           |
-
-### Memory & Search Tools
-
-| Tool                   | Description                                      | Example Usage                                    |
-|------------------------|--------------------------------------------------|--------------------------------------------------|
-| `storeMemory`          | Save page to semantic vault                      | Stores with 384D embedding                       |
-| `getMemories`          | Retrieve all stored memories                     | Returns vault entries                            |
-| `searchVault`          | Semantic search in vault                         | `searchVault("AI topics")`                       |
-| `getVaultStats`        | Get vault statistics                             | Returns count, domains, dates                    |
-
-### Content Tools
-
-| Tool                   | Description                                      | Example Usage                                    |
-|------------------------|--------------------------------------------------|--------------------------------------------------|
-| `writeContent`         | AI-generated content writing                     | `writeContent("blog post about cats")`           |
-| `translateText`        | Translate text to another language               | `translateText("Hello", "es")`                   |
-| `detectLanguage`       | Detect text language                             | Returns language code                            |
-
-### Utility Tools
-
-| Tool                   | Description                                      | Example Usage                                    |
-|------------------------|--------------------------------------------------|--------------------------------------------------|
-| `think`                | Internal reasoning (no action)                   | AI organizes thoughts                            |
-| `highlightText`        | Highlight text on page                           | Visual feedback                                  |
-| `highlightSelector`    | Highlight element by selector                    | Visual feedback                                  |
-| `getPlaybook`          | Load pre-built workflow                          | `getPlaybook("google-search")`                   |
-
-## Playbooks System
-
-Marionette uses **playbooks** for complex multi-step workflows. Think of them as recipes for common tasks.
-
-### Available Playbooks
-
-#### Google Search Playbook
-```typescript
-ID: "google-search"
-Description: "How to search for information using Google"
-
-Steps:
-1. openTab → "https://google.com"
-2. findElements → "Search" 
-3. fillInput → user's query
-4. findElements → "Google Search"
-5. clickElement → search button
-6. captureScreenshot → capture results
-7. Describe findings → STOP
-```
-
-#### Gmail Email Playbook
-```typescript
-ID: "send-email"
-Description: "How to send an email via Gmail"
-
-Steps:
-1. openTab → "https://mail.google.com"
-2. findElements → "compose"
-3. clickElement → open composer
-4. findElements → "To"
-5. fillInput → recipient
-6. writeContent → draft email
-7. Extract subject/body from AI
-8. Fill Gmail fields
-9. Send email
-```
-
-### Creating Custom Playbooks
-
-```typescript
-// lib/playbooks/custom.ts
-import { type Playbook } from './types'
-
-export const customPlaybook: Playbook = {
-  id: 'my-workflow',
-  description: 'Custom automation workflow',
-  requiredTools: ['openTab', 'clickElement'],
-  contents: `## My Workflow
-
-Step 1: Do this...
-Step 2: Then do this...
-Step 3: Finally...
-
-CRITICAL: Important notes here`
-}
-```
-
-## Semantic Memory Vault
-
-Marionette's **Memory Vault** uses AI embeddings for intelligent information retrieval.
-
-### How It Works
-
-```
-1. User: "Remember this page"
-   ↓
-2. Extract page content (Readability.js)
-   ↓
-3. Generate 384D embedding (all-MiniLM-L6-v2)
-   ↓
-4. Store in IndexedDB with metadata
-   ↓
-5. User: "What did I read about X?"
-   ↓
-6. Generate query embedding
-   ↓
-7. Calculate cosine similarity with all entries
-   ↓
-8. Return top matches (>30% similarity)
-```
-
-### Embedding Model Details
-
-| Parameter              | Value                                            |
-|------------------------|--------------------------------------------------|
-| Model                  | Xenova/all-MiniLM-L6-v2                          |
-| Dimensions             | 384                                              |
-| Pooling                | Mean pooling                                     |
-| Normalization          | L2 normalized                                    |
-| Similarity Metric      | Cosine similarity                                |
-| Default Threshold      | 0.3 (30%)                                        |
-
-### Vault Storage Schema
-
-```typescript
-interface VaultEntry {
-  id: string           // Timestamp-based unique ID
-  url: string          // Page URL
-  title: string        // Page title
-  content: string      // Clean text content
-  excerpt: string      // First 200 characters
-  embedding: number[]  // 384D vector
-  timestamp: number    // Unix timestamp
-  domain: string       // Extracted domain
-  wordCount: number    // Content word count
-}
-```
-
-### IndexedDB Structure
-
-```
-Database: marionette_vault
-Version: 1
-
-Object Store: pages
-  - Primary Key: id
-  - Index: timestamp (non-unique)
-  - Index: domain (non-unique)
-  - Index: url (non-unique)
-```
-
-## AI System Prompt
-
-Marionette uses a carefully crafted system prompt to guide the AI's behavior:
-
-```typescript
-You are an AI browser automation assistant.
-
-## Workflow
-
-For simple requests (greetings, questions), respond directly.
-
-For action requests (navigation, automation, search):
-1. If complex (search, email), call getPlaybook
-2. Read the playbook instructions
-3. Execute EACH STEP ONE BY ONE
-4. Wait for [TOOL RESULT] after EACH tool call
-
-## Tool Call Format (CRITICAL)
-
-<function_call>{"function": "toolName", "arguments": {...}}</function_call>
-
-Example:
-<function_call>{"function": "openTab", "arguments": {"url": "https://google.com"}}</function_call>
-```
-
-### Dynamic Context Injection
-
-The system prompt dynamically includes:
-- Current date and time
-- All available tools with documentation
-- Available playbooks
-- Tool call format examples
-
-## Performance & Privacy
-
-### Privacy Features
-
-| Feature                    | Implementation                                                        |
-|----------------------------|-----------------------------------------------------------------------|
-| **Zero Cloud Dependency**  | All AI processing via Chrome's on-device Gemini Nano                  |
-| **Local Embeddings**       | Transformers.js runs entirely in browser (WASM)                       |
-| **No Telemetry**           | No analytics, tracking, or data collection                            |
-| **Local Storage**          | IndexedDB for vault, Chrome Storage for settings                      |
-| **No External Requests**   | Only navigates to URLs you specify                                    |
-
-### Performance Metrics
-
-| Metric                     | Value                                                                 |
-|----------------------------|-----------------------------------------------------------------------|
-| **AI Response Time**       | ~1-3 seconds (streaming)                                              |
-| **Embedding Generation**   | ~100-300ms per page                                                   |
-| **Vault Search**           | ~50-200ms for 100 entries                                             |
-| **Extension Size**         | ~5MB (unpacked)                                                       |
-| **Memory Usage**           | ~150-300MB (with AI model)                                            |
-| **Context Window**         | 9,216 tokens (Gemini Nano limit)                                      |
-
-### Context Management
-
-Marionette tracks token usage in real-time:
-
-```
-Green:  0-4,608 tokens    (0-50%)
-Yellow: 4,609-7,372 tokens (50-80%)
-Red:    7,373+ tokens     (80-100%)
-```
-
-When context is full, the AI will warn you to reset the conversation.
-
-## Development
-
-### Project Structure
-
-```
-Dependencies:
-- React 18.2 (UI framework)
-- Plasmo 0.90 (Extension framework)
-- TypeScript 5.3 (Language)
-- Tailwind CSS 3.4 (Styling)
-- Zustand 5.0 (State management)
-- @xenova/transformers 2.17 (ML inference)
-- @picovoice/porcupine-web 3.0 (Wake word)
-```
-
-### Development Commands
-
-```bash
-# Start development server
-pnpm dev
-
-# Build production bundle
-pnpm build
-
-# Create distributable package
-pnpm package
-
-# Type checking
-tsc --noEmit
-
-# Linting (if configured)
-eslint . --ext .ts,.tsx
-```
-
-### Adding New Tools
-
-1. **Create message handler:**
-
-```typescript
-// tools/myTool.ts
-import type { PlasmoMessaging } from "@plasmohq/messaging"
-
-const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
-  const { arg1, arg2 } = req.body
-  
-  // Implement tool logic
-  const result = await doSomething(arg1, arg2)
-  
-  res.send({ success: true, data: result })
-}
-
-export default handler
-```
-
-2. **Register in tool registry:**
-
-```typescript
-// lib/tools.ts
-export const TOOLS = {
-  // ... existing tools
-  myTool: {
-    name: 'myTool',
-    description: 'Does something useful',
-    parameters: {
-      arg1: { type: 'string', required: true },
-      arg2: { type: 'number', required: false }
-    },
-    spokenLine: (args) => `Executing my tool with ${args.arg1}`
-  }
-}
-```
-
-3. **Add to core tools (optional):**
-
-```typescript
-// lib/core-tools.ts
-export const CORE_TOOLS = [
-  'think',
-  'getPlaybook',
-  // ...
-  'myTool'  // Add here to include in system prompt
-]
-```
-
-### Testing Tools
-
-Use the Debug Screen to test tools:
-
-1. Click Debug icon (bug) in header
-2. Select tool from dropdown
-3. Enter JSON arguments
-4. Click "Call Tool"
-5. View results
-
-## Troubleshooting
-
-### Common Issues
-
-#### AI Model Not Available
-
-**Error:** "AI model unavailable"
-
-**Solution:**
-1. Check Chrome version (127+ Dev/Canary required)
-2. Enable flags at `chrome://flags`:
-   - Prompt API for Gemini Nano
-   - Summarization API
-3. Download model: `await ai.languageModel.create()`
-4. Restart browser
-
-#### Microphone Permission Denied
-
-**Error:** "Microphone Permission Denied"
-
-**Solution:**
-1. Click Settings icon in Marionette
-2. Grant microphone permission
-3. Or go to `chrome://settings/content/microphone`
-4. Allow Marionette extension
-
-#### Speech Recognition Not Available
-
-**Error:** "Speech Recognition Not Available"
-
-**Solution:**
-- Use Chrome browser (not Firefox/Safari)
-- Web Speech API not available in all browsers
-- Try Chrome Dev/Canary
-
-#### Tool Execution Fails
-
-**Error:** Tool returns empty or errors
-
-**Solution:**
-1. Check if page is fully loaded
-2. Try more specific queries (e.g., "search textbox" vs "search")
-3. Use Debug Screen to test tool calls
-4. Check browser console for errors
-
-#### Context Window Full
-
-**Warning:** Red context indicator (7,373+ tokens)
-
-**Solution:**
-1. Click Reset button (circular arrow)
-2. Starts fresh conversation
-3. Consider more concise commands
-
-### Debug Mode
-
-Access debug features:
-
-1. **System Prompt Viewer:**
-   - See exact prompt sent to AI
-   - View all registered tools
-   - Check playbook documentation
-
-2. **Tool Tester:**
-   - Manually test any tool
-   - See raw responses
-   - Debug tool arguments
-
-3. **Conversation History:**
-   - View all messages
-   - See tool calls and results
-   - Export conversation log
-
-## Roadmap
-
-### In Progress
-
-- [ ] Wake word detection ("Hey Marionette")
-- [ ] Chrome Web Store publication
-- [ ] Enhanced playbook system
-- [ ] Visual element highlighting improvements
-
-### Planned Features
-
-- [ ] Custom playbook builder UI
-- [ ] Multi-language voice support
-- [ ] Browser action recording/replay
-- [ ] Shared playbook marketplace
-- [ ] Firefox/Edge support
-- [ ] Mobile browser support
-- [ ] Advanced memory management (chunking, summaries)
-- [ ] Integration with external tools (Notion, Calendar)
-
-### Future Exploration
-
-- [ ] Vision capabilities (image understanding)
-- [ ] Audio processing (transcription)
-- [ ] Autonomous task execution
-- [ ] Multi-page workflows
-- [ ] Team collaboration features
-
-## Contributing
-
-We welcome contributions! Here's how to get started:
-
-1. **Fork the repository**
-2. **Create a feature branch**
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Make your changes**
-   - Follow TypeScript best practices
-   - Add JSDoc comments
-   - Keep functions focused and small
-4. **Test thoroughly**
-   - Test in Chrome Dev/Canary
-   - Test voice input/output
-   - Test all affected tools
-5. **Commit your changes**
-   ```bash
-   git commit -m "Add amazing feature"
-   ```
-6. **Push to your fork**
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-7. **Open a Pull Request**
-
-### Contribution Guidelines
-
-- **Code Style:** Follow existing patterns, use TypeScript strict mode
-- **Documentation:** Update README for new features
-- **Testing:** Ensure all tools work correctly
-- **Privacy:** Never add telemetry or tracking
-- **Performance:** Keep bundle size minimal
-
-## Security
-
-### Security Principles
-
-1. **No Remote Code Execution:** All code runs locally
-2. **Minimal Permissions:** Only request necessary permissions
-3. **User Consent:** Explicit approval for sensitive actions
-4. **No Data Transmission:** Zero external API calls
-5. **Open Source:** Fully auditable codebase
-
-### Reporting Security Issues
-
-If you discover a security vulnerability:
-
-1. **DO NOT** open a public issue
-2. Email: ceo@vidova.ai
-3. Include detailed description
-4. Allow time for patch before disclosure
-
-## License
-
-This project is licensed under the **MIT License** - see the [LICENSE.txt](./LICENSE.txt) file for details.
-
-```
-MIT License
-
-Copyright (c) 2025 Younes Laaroussi
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction...
-```
-
-## Acknowledgments
-
-### Core Technologies
-
-- **[Chrome Built-in AI](https://developer.chrome.com/docs/ai/built-in)** - Gemini Nano on-device AI
-- **[Transformers.js](https://huggingface.co/docs/transformers.js)** - Browser-based ML inference by Xenova
-- **[Plasmo Framework](https://www.plasmo.com/)** - Modern browser extension development
-- **[Picovoice Porcupine](https://picovoice.ai/platform/porcupine/)** - Wake word detection
-- **[Mozilla Readability](https://github.com/mozilla/readability)** - Article extraction
-- **[Radix UI](https://www.radix-ui.com/)** - Accessible component primitives
-
-### Models
-
-- **Gemini Nano** by Google DeepMind - On-device language model
-- **all-MiniLM-L6-v2** by Microsoft - Sentence embeddings (384D)
-
-### Inspiration
-
-- **Vimium** - Keyboard navigation for browsers
-- **Serenade** - Voice coding tool
-- **GPT-4 Vision** - Multimodal AI capabilities
+### Areas for Contribution
+
+**High Priority:**
+- **Porcupine wake word detection** - Currently non-functional in browser context; requires engineering to work with Web Audio API or service worker constraints
+- Additional playbooks (booking flights, shopping, research workflows)
+- Tool improvements (better error messages, more robust parsing)
+- Prompt engineering (optimize alignment, reduce hallucinations)
+- Performance profiling (identify bottlenecks in tool execution)
+
+**Medium Priority:**
+- UI polish (animations, better visualizations)
+- More perception tools (DOM query capabilities, XPath support)
+- Vault enhancements (cleanup logic, export/import)
+- Rating analysis (scripts to extract patterns from stored ratings)
+
+**Experimental:**
+- Fine-tuning support (if Chrome ever exposes it)
+- Multi-agent collaboration (coordinating multiple Nano instances)
+- Advanced memory (vector clustering, topic modeling)
+- Tool composition (combining simple tools into complex ones)
 
 ---
 
-<p align="center">
-  Made with ❤️ by <a href="https://vidova.ai">Younes Laaroussi</a>
-</p>
+## License
 
-<p align="center">
-  <b>Marionette - Your voice-controlled browser assistant, completely private.</b>
-</p>
-
+MIT License - See [LICENSE.txt](./LICENSE.txt)

@@ -2,7 +2,7 @@ import { type Playbook } from './types'
 
 export const searchPlaybook: Playbook = {
   id: 'google-search',
-  description: 'How to search for information using Google',
+  description: 'ONLY use to open Google.com from scratch. DO NOT use if user is already on a search site (YouTube, Amazon, etc.) - work with the current page instead',
   requiredTools: ['openTab', 'findElements', 'fillInput', 'clickElement', 'captureScreenshot'],
   contents: `## Google Search Workflow
 

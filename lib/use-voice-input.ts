@@ -28,7 +28,12 @@ export const useVoiceInput = (): UseVoiceInputReturn => {
           await sendMessage(finalTranscript)
         }
       } else {
-        startListening()
+        // Pass callback to handle auto-end (when recognition stops due to silence)
+        startListening(async (autoTranscript: string) => {
+          if (autoTranscript.trim()) {
+            await sendMessage(autoTranscript)
+          }
+        })
       }
     } catch (error: any) {
       console.error('Voice input error:', error)

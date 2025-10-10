@@ -48,15 +48,14 @@ export const spec: ToolSpec = {
     {
       name: 'id',
       type: 'string',
-      description: 'The playbook ID (e.g., "google-search", "send-email")',
+      description: 'The playbook ID (e.g., "send-email", "fill-form")',
       required: true
     }
   ],
   examples: [
-    'User: "search for weather" → <function_call>{"function": "getPlaybook", "arguments": {"id": "google-search"}}</function_call>',
-    'User: "google AAPL stock" → <function_call>{"function": "getPlaybook", "arguments": {"id": "google-search"}}</function_call>',
     'User: "send email" → <function_call>{"function": "getPlaybook", "arguments": {"id": "send-email"}}</function_call>',
-    'User: "fill this form" → <function_call>{"function": "getPlaybook", "arguments": {"id": "fill-form"}}</function_call>'
+    'User: "fill this form" → <function_call>{"function": "getPlaybook", "arguments": {"id": "fill-form"}}</function_call>',
+    'User: "listen to this video" → <function_call>{"function": "getPlaybook", "arguments": {"id": "listen-audio"}}</function_call>'
   ],
   spokenLine: 'Getting workflow instructions'
 }

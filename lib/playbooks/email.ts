@@ -2,7 +2,7 @@ import { type Playbook } from './types'
 
 export const emailPlaybook: Playbook = {
   id: 'send-email',
-  description: 'How to send an email via Gmail',
+  description: 'Opens Gmail to send email - ONLY use if not already on Gmail',
   requiredTools: ['openTab', 'findElements', 'fillInput', 'clickElement', 'writeContent'],
   contents: `## Email Workflow
 

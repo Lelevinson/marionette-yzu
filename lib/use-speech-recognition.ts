@@ -5,7 +5,7 @@ import { useMediaDevice } from './media-device-context'
 interface UseSpeechRecognitionReturn {
   isListening: boolean
   transcript: string
-  startListening: () => void
+  startListening: (onAutoEnd?: (transcript: string) => void) => void
   stopListening: () => Promise<string>
 }
 
@@ -15,8 +15,13 @@ export const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
   const [transcript, setTranscript] = useState("")
   const recognitionRef = useRef<any>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
+  const onAutoEndRef = useRef<((transcript: string) => void) | null>(null)
+  const transcriptRef = useRef<string>("")
 
-  const startListening = useCallback(async () => {
+  const startListening = useCallback(async (onAutoEnd?: (transcript: string) => void) => {
+    // Store the callback
+    onAutoEndRef.current = onAutoEnd || null
+    
     // Check if Web Speech API is available
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     
@@ -45,6 +50,7 @@ export const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
     recognition.onstart = () => {
       setIsListening(true)
       setTranscript("")
+      transcriptRef.current = ""
     }
 
     recognition.onresult = (event: any) => {
@@ -60,7 +66,9 @@ export const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
         }
       }
 
-      setTranscript((finalTranscript || interimTranscript).trim())
+      const currentTranscript = (finalTranscript || interimTranscript).trim()
+      setTranscript(currentTranscript)
+      transcriptRef.current = currentTranscript
     }
 
     recognition.onerror = (event: any) => {
@@ -80,6 +88,14 @@ export const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop())
         mediaStreamRef.current = null
+      }
+      
+      // If recognition auto-ended and we have a callback, call it with the current transcript
+      if (onAutoEndRef.current && transcriptRef.current) {
+        onAutoEndRef.current(transcriptRef.current)
+        setTranscript("")
+        transcriptRef.current = ""
+        onAutoEndRef.current = null
       }
     }
 

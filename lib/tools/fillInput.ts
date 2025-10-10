@@ -74,7 +74,8 @@ export const spec: ToolSpec = {
   ],
   spokenLine: "Entering {value}",
   examples: [
-    'User: "fill the email field with test@example.com" → First getAccessibilitySnapshot to find email input, then fillInput with its index and value',
+    'User: "search for AI podcasts" → findElements "search box" gets [3] COMBOBOX, then fillInput with index: 3, value: "AI podcasts"',
+    'User: "fill the email field with test@example.com" → findElements "email", then fillInput with index and value',
     'After seeing "[3] TEXTBOX: Email" → fillInput with index: 3, value: "test@example.com"'
   ]
 }

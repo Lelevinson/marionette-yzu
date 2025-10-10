@@ -27,7 +27,7 @@ async function openTab(params: { url: string }, context?: string) {
 
 export const spec: ToolSpec = {
   name: 'openTab',
-  description: 'Opens a URL in a new browser tab',
+  description: 'Opens a URL in a new browser tab. USE THIS to open links/videos, NOT clickElement. Extract the href from findElements result.',
   parameters: [
     {
       name: 'url',
@@ -39,8 +39,9 @@ export const spec: ToolSpec = {
   spokenLine: "Opening {url}",
   examples: [
     'User: "open google" → openTab with url: "https://www.google.com"',
-    'User: "go to reddit" → openTab with url: "https://www.reddit.com"',
-    'User: "navigate to youtube.com" → openTab with url: "https://www.youtube.com"'
+    'User: "click first video" → findElements "video" shows [118] LINK with (https://youtube.com/...), then openTab with that URL',
+    'After findElements shows a link with href → openTab with url: "https://..."',
+    'User: "go to that page" → openTab with the href from findElements result'
   ]
 }
 
