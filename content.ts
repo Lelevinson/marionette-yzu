@@ -31,7 +31,7 @@ async function handleFillInput(selector: string, value: string): Promise<string>
     const element = document.querySelector(selector) as HTMLElement
     
     if (!element) {
-      reject(new Error(`Element not found: ${selector}`))
+      reject(new Error(`Element not found with selector ${selector}. Call findElements or getAccessibilitySnapshot first to get current element indices.`))
       return
     }
     

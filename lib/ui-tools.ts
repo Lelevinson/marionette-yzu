@@ -40,6 +40,85 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
         target: { tabId: tab.id },
         func: () => {
           try {
+            // Extract structured data before Readability strips it
+            const structuredData: string[] = []
+            
+            // Extract emails from mailto links
+            const emailLinks = document.querySelectorAll('a[href^="mailto:"]')
+            const emails = new Set<string>()
+            emailLinks.forEach(link => {
+              const href = link.getAttribute('href')
+              if (href) {
+                const email = href.replace('mailto:', '').split('?')[0].trim()
+                if (email && email.includes('@')) {
+                  emails.add(email)
+                }
+              }
+            })
+            
+            // Extract phone numbers from tel links
+            const phoneLinks = document.querySelectorAll('a[href^="tel:"]')
+            const phones = new Set<string>()
+            phoneLinks.forEach(link => {
+              const href = link.getAttribute('href')
+              if (href) {
+                const phone = href.replace('tel:', '').trim()
+                if (phone) {
+                  phones.add(phone)
+                }
+              }
+            })
+            
+            // Also find emails in text content using regex
+            const textContent = document.body.innerText
+            const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g
+            const emailMatches = textContent.match(emailRegex)
+            if (emailMatches) {
+              emailMatches.forEach(email => emails.add(email))
+            }
+            
+            // Find phone numbers in text (North American format)
+            const phoneRegex = /\b(?:\+?1[-.]?)?\(?([0-9]{3})\)?[-.]?([0-9]{3})[-.]?([0-9]{4})\b/g
+            const phoneMatches = textContent.match(phoneRegex)
+            if (phoneMatches) {
+              phoneMatches.forEach(phone => phones.add(phone))
+            }
+            
+            // Extract social media links
+            const socialLinks = new Set<string>()
+            const socialPatterns = [
+              /twitter\.com\/[^\/\s"]+/i,
+              /x\.com\/[^\/\s"]+/i,
+              /linkedin\.com\/in\/[^\/\s"]+/i,
+              /linkedin\.com\/company\/[^\/\s"]+/i,
+              /facebook\.com\/[^\/\s"]+/i,
+              /instagram\.com\/[^\/\s"]+/i,
+              /github\.com\/[^\/\s"]+/i
+            ]
+            
+            document.querySelectorAll('a[href]').forEach(link => {
+              const href = link.getAttribute('href')
+              if (href) {
+                socialPatterns.forEach(pattern => {
+                  const match = href.match(pattern)
+                  if (match) {
+                    socialLinks.add(match[0])
+                  }
+                })
+              }
+            })
+            
+            // Build structured data section
+            if (emails.size > 0) {
+              structuredData.push('\n\nContact Emails: ' + Array.from(emails).join(', '))
+            }
+            if (phones.size > 0) {
+              structuredData.push('\n\nContact Phones: ' + Array.from(phones).join(', '))
+            }
+            if (socialLinks.size > 0) {
+              structuredData.push('\n\nSocial Media: ' + Array.from(socialLinks).join(', '))
+            }
+            
             const documentClone = document.cloneNode(true) as Document
             // @ts-ignore
             const reader = new Readability(documentClone, {
@@ -58,17 +137,22 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
                 return { success: false, error: 'Insufficient content' }
               }
               
+              const contentWithStructured = content.replace(/\s+/g, ' ').trim() + structuredData.join('')
+              
               return {
                 success: true,
                 title: document.title,
-                content: content.replace(/\s+/g, ' ').trim()
+                content: contentWithStructured
               }
             }
+            
+            let cleanContent = article.textContent.replace(/\s+/g, ' ').trim()
+            cleanContent += structuredData.join('')
             
             return {
               success: true,
               title: article.title || document.title,
-              content: article.textContent.replace(/\s+/g, ' ').trim()
+              content: cleanContent
             }
           } catch (error: any) {
             return { success: false, error: error.message }
@@ -108,11 +192,51 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
         })
       }
 
-      // Summarize the content
-      const summary = await summarizer.summarize(extracted.content)
+      // Try to summarize with progressive truncation if input is too large
+      let content = extracted.content
+      let summary = null
+      let truncationPercentage = 1.0 // Start with full content
+      const minTruncation = 0.1 // At least 10% of original content
+      
+      while (truncationPercentage >= minTruncation) {
+        try {
+          const truncatedContent = content.substring(0, Math.floor(content.length * truncationPercentage))
+          console.log(`Attempting summarization with ${(truncationPercentage * 100).toFixed(0)}% of content (${truncatedContent.length} chars)`)
+          
+          summary = await summarizer.summarize(truncatedContent)
+          
+          // Success! Break out of the loop
+          if (truncationPercentage < 1.0) {
+            console.log(`Successfully summarized with ${(truncationPercentage * 100).toFixed(0)}% of original content`)
+          }
+          break
+        } catch (error: any) {
+          const errorMessage = error.message?.toLowerCase() || ''
+          
+          // Check if it's a "too large" error
+          if (errorMessage.includes('too large') || errorMessage.includes('too long')) {
+            console.log(`Content too large at ${(truncationPercentage * 100).toFixed(0)}%, trying with less content`)
+            // Reduce by 20% each time
+            truncationPercentage -= 0.2
+            
+            if (truncationPercentage < minTruncation) {
+              // We've tried enough, give up
+              throw new Error('Content is too large even after maximum truncation. Try a different page or shorter article.')
+            }
+            // Continue the loop to try again with truncated content
+          } else {
+            // Some other error, don't retry
+            throw error
+          }
+        }
+      }
 
       // Clean up
       summarizer.destroy()
+
+      if (!summary) {
+        throw new Error('Failed to generate summary')
+      }
 
       return `Summary of "${extracted.title}":\n\n${summary}`
     } catch (error: any) {
@@ -151,15 +275,17 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
         throw new WriterAPIUnavailableError(`Translation from ${sourceLanguage} to ${targetLanguage} is not supported`)
       }
       
-      // Create translator
+      // Create translator (will download if needed)
       let translator
-      if (availability === 'readily') {
+      if (availability === 'available') {
+        // Ready to use immediately
         translator = await (self as any).Translator.create({
           sourceLanguage,
           targetLanguage
         })
-      } else {
-        // Model needs to be downloaded
+      } else if (availability === 'downloadable') {
+        // Model needs to be downloaded - this requires user gesture which we have
+        console.log(`Translator model needs download for ${sourceLanguage} → ${targetLanguage}`)
         translator = await (self as any).Translator.create({
           sourceLanguage,
           targetLanguage,
@@ -169,13 +295,15 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
             })
           }
         })
+      } else {
+        throw new WriterAPIUnavailableError(`Translation availability status unknown: ${availability}`)
       }
       
       // Translate the text
       const result = await translator.translate(text)
       
       // Clean up
-      translator.destroy()
+      translator.destroy?.()
       
       return result
     } catch (error: any) {
@@ -208,12 +336,14 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
         throw new WriterAPIUnavailableError('Language Detector model is not available')
       }
       
-      // Create detector
+      // Create detector (will download if needed)
       let detector
-      if (availability === 'readily') {
+      if (availability === 'available') {
+        // Ready to use immediately
         detector = await (self as any).LanguageDetector.create()
-      } else {
-        // Model needs to be downloaded
+      } else if (availability === 'downloadable') {
+        // Model needs to be downloaded - this requires user gesture which we have
+        console.log('Language Detector model needs download')
         detector = await (self as any).LanguageDetector.create({
           monitor(m: any) {
             m.addEventListener('downloadprogress', (e: any) => {
@@ -221,25 +351,33 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
             })
           }
         })
+      } else {
+        throw new WriterAPIUnavailableError(`Language Detector availability status unknown: ${availability}`)
       }
       
       // Detect language
       const results = await detector.detect(text)
       
       // Clean up
-      detector.destroy()
+      detector.destroy?.()
       
-      // Return top result with all candidates
+      // Return top result with all candidates as a formatted string
       if (results && results.length > 0) {
         const topResult = results[0]
-        return {
-          language: topResult.detectedLanguage,
-          confidence: topResult.confidence,
-          allResults: results.slice(0, 5).map((r: any) => ({
-            language: r.detectedLanguage,
-            confidence: r.confidence
-          }))
+        const topLanguage = topResult.detectedLanguage
+        const topConfidence = (topResult.confidence * 100).toFixed(1)
+        
+        // Format alternative detections if available
+        const alternatives = results.slice(1, 5).map((r: any) => 
+          `${r.detectedLanguage} (${(r.confidence * 100).toFixed(1)}%)`
+        ).join(', ')
+        
+        let result = `Detected language: ${topLanguage} (${topConfidence}% confidence)`
+        if (alternatives) {
+          result += `\nAlternatives: ${alternatives}`
         }
+        
+        return result
       }
       
       throw new Error('No language detected')

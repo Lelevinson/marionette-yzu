@@ -1,10 +1,12 @@
 // Simple AI module
 import { TOOL_REGISTRY } from './tool-registry'
 import { getSystemPrompt } from './prompts/system-prompt'
+import { E2E_TEST_CONFIG } from './e2e-config'
 
 let aiSession: any = null
 let currentController: AbortController | null = null
 let filledSystemPrompt: string | null = null
+let isFirstPrompt = true
 
 async function ensureSession() {
   if (!aiSession) {
@@ -28,8 +30,20 @@ async function ensureSession() {
   }
 }
 
-export async function streamResponse(message: string, onChunk: (chunk: string) => void, toolResult?: any): Promise<number> {
+export async function streamResponse(
+  message: string, 
+  onChunk: (chunk: string) => void, 
+  toolResult?: any,
+  onWarmingUp?: () => void,
+  onWarmupComplete?: () => void
+): Promise<number> {
   await ensureSession()
+  
+  // Notify warmup if this is the first prompt (the actual slow part)
+  if (isFirstPrompt && onWarmingUp && !E2E_TEST_CONFIG.SKIP_WARMUP_PHASE) {
+    console.log('[AI] First prompt - model warming up...')
+    onWarmingUp()
+  }
   
   currentController = new AbortController()
   
@@ -70,7 +84,19 @@ export async function streamResponse(message: string, onChunk: (chunk: string) =
   
   const stream = aiSession.promptStreaming(promptInput, { signal: currentController.signal })
   
+  let firstChunk = true
   for await (const chunk of stream) {
+    // Notify warmup complete on first token
+    if (firstChunk && isFirstPrompt && onWarmupComplete && !E2E_TEST_CONFIG.SKIP_WARMUP_PHASE) {
+      console.log('[AI] Model warmup complete - first token received')
+      onWarmupComplete()
+      isFirstPrompt = false
+      firstChunk = false
+    } else if (firstChunk && isFirstPrompt && E2E_TEST_CONFIG.SKIP_WARMUP_PHASE) {
+      // Skip warmup callbacks but still mark first prompt as done
+      isFirstPrompt = false
+      firstChunk = false
+    }
     onChunk(chunk)
   }
   
@@ -115,6 +141,8 @@ export function destroySession() {
     aiSession = null
   }
   filledSystemPrompt = null
+  // Reset first prompt flag so next prompt will trigger warmup
+  isFirstPrompt = true
 }
 
 export function getFilledSystemPrompt(): string | null {

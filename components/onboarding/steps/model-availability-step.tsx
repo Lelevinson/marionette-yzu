@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Brain, AlertCircle, CheckCircle, ArrowRight, ArrowLeft, Loader2, ExternalLink } from 'lucide-react'
 import { useOnboarding } from '../onboarding-provider'
-import { openAIFlagsPage, openWriterAPIFlagsPage, openSummarizationAPIFlagsPage, openChromeAIDocs } from '../../../lib/alert-context'
+import { openAIFlagsPage, openWriterAPIFlagsPage, openSummarizationAPIFlagsPage, openTranslatorAPIFlagsPage, openChromeAIDocs } from '../../../lib/alert-context'
 
 type APIStatus = 'checking' | 'available' | 'unavailable' | 'after-download'
 
@@ -9,6 +9,7 @@ interface APIAvailability {
   promptAPI: APIStatus
   writerAPI: APIStatus
   summarizationAPI: APIStatus
+  translationAPI: APIStatus
 }
 
 type ModelState = 'checking' | 'available' | 'partial' | 'unavailable' | 'downloading' | 'error'
@@ -17,6 +18,7 @@ interface DownloadProgress {
   promptAPI: number
   writerAPI: number
   summarizationAPI: number
+  translationAPI: number
   embeddingModel: number
 }
 
@@ -26,13 +28,15 @@ export const ModelAvailabilityStep = () => {
   const [apiStatus, setApiStatus] = useState<APIAvailability>({
     promptAPI: 'checking',
     writerAPI: 'checking',
-    summarizationAPI: 'checking'
+    summarizationAPI: 'checking',
+    translationAPI: 'checking'
   })
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>({
     promptAPI: 0,
     writerAPI: 0,
     summarizationAPI: 0,
+    translationAPI: 0,
     embeddingModel: 0
   })
   const [currentlyDownloading, setCurrentlyDownloading] = useState<string | null>(null)
@@ -53,12 +57,13 @@ export const ModelAvailabilityStep = () => {
     setErrorMessage('')
 
     console.log('[Onboarding] ===== Starting API Availability Check =====')
-    console.log('[Onboarding] Checking: window.LanguageModel, window.Writer, window.Summarizer')
+    console.log('[Onboarding] Checking: window.LanguageModel, window.Writer, window.Summarizer, window.Translator')
 
     const newStatus: APIAvailability = {
       promptAPI: 'checking',
       writerAPI: 'checking',
-      summarizationAPI: 'checking'
+      summarizationAPI: 'checking',
+      translationAPI: 'checking'
     }
 
     try {
@@ -151,6 +156,37 @@ export const ModelAvailabilityStep = () => {
         }
       }
 
+      // Check Translation API (optional)
+      console.log('[Onboarding] Checking Translation API...')
+      console.log('[Onboarding] window.Translator exists:', 'Translator' in window)
+      
+      if (!('Translator' in window)) {
+        console.log('[Onboarding] Translation API NOT FOUND')
+        newStatus.translationAPI = 'unavailable'
+      } else {
+        try {
+          // Check if translation API is available by testing availability
+          const availability = await (window as any).Translator.availability({ 
+            sourceLanguage: 'en', 
+            targetLanguage: 'es' 
+          })
+          console.log('[Onboarding] Translation API availability:', availability)
+          
+          if (availability === 'no') {
+            newStatus.translationAPI = 'unavailable'
+          } else if (availability === 'downloadable') {
+            newStatus.translationAPI = 'after-download'
+          } else if (availability === 'available') {
+            newStatus.translationAPI = 'available'
+          } else {
+            newStatus.translationAPI = 'unavailable'
+          }
+        } catch (error) {
+          console.error('[Onboarding] Translation API check failed:', error)
+          newStatus.translationAPI = 'unavailable'
+        }
+      }
+
       console.log('[Onboarding] Final API Status:', newStatus)
       setApiStatus(newStatus)
 
@@ -163,7 +199,8 @@ export const ModelAvailabilityStep = () => {
         setModelAvailability(false)
       } else if (newStatus.promptAPI === 'after-download' || 
                  newStatus.writerAPI === 'after-download' || 
-                 newStatus.summarizationAPI === 'after-download') {
+                 newStatus.summarizationAPI === 'after-download' ||
+                 newStatus.translationAPI === 'after-download') {
         console.log('[Onboarding] Starting model downloads...')
         // Start downloading models (including embedding model)
         await downloadModels(newStatus)
@@ -265,6 +302,34 @@ export const ModelAvailabilityStep = () => {
           console.log('[Onboarding] Summarization API download complete')
         } catch (error) {
           console.error('[Onboarding] Summarization API download failed:', error)
+          // Optional API, continue anyway
+        }
+      }
+
+      // Download Translation API (optional)
+      if (status.translationAPI === 'after-download') {
+        setCurrentlyDownloading('Translation API')
+        console.log('[Onboarding] Starting Translation API download')
+        
+        try {
+          const translator = await (window as any).Translator.create({
+            sourceLanguage: 'en',
+            targetLanguage: 'es',
+            monitor(m: any) {
+              m.addEventListener('downloadprogress', (e: any) => {
+                const progress = Math.round(e.loaded * 100)
+                setDownloadProgress(prev => ({ ...prev, translationAPI: progress }))
+                console.log(`[Onboarding] Translation API downloading: ${progress}%`)
+              })
+            }
+          })
+          
+          updatedStatus.translationAPI = 'available'
+          setApiStatus(updatedStatus)
+          translator.destroy?.()
+          console.log('[Onboarding] Translation API download complete')
+        } catch (error) {
+          console.error('[Onboarding] Translation API download failed:', error)
           // Optional API, continue anyway
         }
       }
@@ -424,6 +489,26 @@ export const ModelAvailabilityStep = () => {
                 </div>
               )}
 
+              {/* Translation API Download */}
+              {(apiStatus.translationAPI === 'after-download' || downloadProgress.translationAPI > 0) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-300">Translation API</span>
+                    <span className={`${currentlyDownloading === 'Translation API' ? 'text-blue-400' : 'text-gray-500'}`}>
+                      {apiStatus.translationAPI === 'available' ? 'Complete' : `${downloadProgress.translationAPI}%`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${
+                        apiStatus.translationAPI === 'available' ? 'bg-green-500' : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${apiStatus.translationAPI === 'available' ? 100 : downloadProgress.translationAPI}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Embedding Model Download */}
               {(currentlyDownloading === 'Embedding Model' || downloadProgress.embeddingModel > 0) && (
                 <div className="space-y-2">
@@ -503,6 +588,23 @@ export const ModelAvailabilityStep = () => {
                 </div>
 
                 <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400">Translation API (Optional)</span>
+                  <span className={`flex items-center gap-1 ${
+                    apiStatus.translationAPI === 'available' ? 'text-green-400' : 
+                    apiStatus.translationAPI === 'after-download' ? 'text-yellow-400' :
+                    'text-gray-500'
+                  }`}>
+                    {apiStatus.translationAPI === 'available' ? (
+                      <><CheckCircle className="w-3 h-3" /> Available</>
+                    ) : apiStatus.translationAPI === 'after-download' ? (
+                      <><AlertCircle className="w-3 h-3" /> Needs Download</>
+                    ) : (
+                      <><AlertCircle className="w-3 h-3" /> Unavailable</>
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-400">Embedding Model (Required)</span>
                   <span className={`flex items-center gap-1 ${
                     embeddingModelDownloaded ? 'text-green-400' : 'text-yellow-400'
@@ -517,7 +619,7 @@ export const ModelAvailabilityStep = () => {
               </div>
 
               {/* Show enable buttons for unavailable optional APIs */}
-              {(apiStatus.writerAPI === 'unavailable' || apiStatus.summarizationAPI === 'unavailable') && (
+              {(apiStatus.writerAPI === 'unavailable' || apiStatus.summarizationAPI === 'unavailable' || apiStatus.translationAPI === 'unavailable') && (
                 <div className="pt-2 space-y-2">
                   <div className="text-[10px] text-gray-400">
                     Enable optional APIs for enhanced features:
@@ -557,6 +659,23 @@ export const ModelAvailabilityStep = () => {
                     </div>
                   )}
 
+                  {apiStatus.translationAPI === 'unavailable' && (
+                    <div className="bg-gray-800/50 rounded-lg p-2 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-gray-300 font-medium">Translation API</span>
+                        <button
+                          onClick={openTranslatorAPIFlagsPage}
+                          className="px-2 py-1 bg-blue-900 hover:bg-blue-800 text-white rounded text-[10px] transition-colors"
+                        >
+                          Enable
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-gray-500">
+                        Provides on-device language translation
+                      </p>
+                    </div>
+                  )}
+
                   <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mt-2">
                     <p className="text-[10px] text-yellow-400">
                       After enabling any API, you must relaunch Chrome for changes to take effect.
@@ -565,7 +684,7 @@ export const ModelAvailabilityStep = () => {
                 </div>
               )}
 
-              {apiStatus.writerAPI === 'available' && apiStatus.summarizationAPI === 'available' && (
+              {apiStatus.writerAPI === 'available' && apiStatus.summarizationAPI === 'available' && apiStatus.translationAPI === 'available' && (
                 <div className="pt-2 text-xs text-gray-500">
                   <p>All APIs ready. Processing happens locally on your device.</p>
                 </div>
@@ -610,6 +729,13 @@ export const ModelAvailabilityStep = () => {
                     Summarizer
                   </button>
                 </div>
+                
+                <button
+                  onClick={openTranslatorAPIFlagsPage}
+                  className="w-full bg-gray-800 text-white px-3 py-2 rounded-lg text-xs hover:bg-gray-700 transition-colors"
+                >
+                  Translation API
+                </button>
                 
                 <button
                   onClick={checkModelAvailability}

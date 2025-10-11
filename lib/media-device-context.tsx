@@ -19,22 +19,26 @@ export const MediaDeviceProvider = ({ children }: { children: ReactNode }) => {
       const mics = devices.filter(device => device.kind === 'audioinput')
       setAvailableMics(mics)
       
-      // Check if selected mic still exists
-      if (selectedMicId) {
-        const micExists = mics.find(m => m.deviceId === selectedMicId)
-        if (!micExists && mics.length > 0) {
-          // Fallback to first available
-          setSelectedMicId(mics[0].deviceId)
+      // Check if selected mic still exists using functional setState
+      setSelectedMicId(currentMicId => {
+        if (currentMicId) {
+          const micExists = mics.find(m => m.deviceId === currentMicId)
+          if (!micExists && mics.length > 0) {
+            // Fallback to first available
+            return mics[0].deviceId
+          }
+          return currentMicId
+        } else if (mics.length > 0) {
+          // No mic selected, select default or first
+          const defaultMic = mics.find(mic => mic.deviceId === 'default') || mics[0]
+          return defaultMic.deviceId
         }
-      } else if (mics.length > 0) {
-        // No mic selected, select default or first
-        const defaultMic = mics.find(mic => mic.deviceId === 'default') || mics[0]
-        setSelectedMicId(defaultMic.deviceId)
-      }
+        return currentMicId
+      })
     } catch (error) {
       console.error('Failed to enumerate devices:', error)
     }
-  }, [selectedMicId])
+  }, [])
 
   useEffect(() => {
     // Load from storage

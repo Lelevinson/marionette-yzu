@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
+import { splitIntoSentences } from './sentence-parser'
 
 interface TTSContextValue {
   selectedVoiceUri: string | null
@@ -8,7 +9,7 @@ interface TTSContextValue {
   stop: () => void
   isSpeaking: boolean
   previewVoice: (uri: string) => Promise<boolean>
-  handleNewText: (text: string) => void
+  handleNewText: (text: string, forceSpeak?: boolean) => void
   currentSentence: string
   queueLength: number
   audioEnabled: boolean
@@ -30,51 +31,6 @@ const estimateSpeakingDuration = (text: string): number => {
   return Math.min(Math.max(baseTime, minTime), maxTime)
 }
 
-// Heuristic: consider a sentence complete when it ends with ! or ?;
-// for '.' require that the token before '.' is preceded by start-of-line or whitespace
-// to avoid treating emails/URLs like "name@domain." as sentences during streaming.
-const isCompleteSentence = (s: string): boolean => {
-  const t = s.trim()
-  if (!t) return false
-  // Never treat ellipses as end of sentence in streaming
-  if (/\.\.\.$/.test(t)) return false
-  if (/[!?]"?$/.test(t)) return true
-  // For a trailing period, require whitespace or start before the last token
-  return /(?:^|\s)\S+\."?$/.test(t)
-}
-
-const extractSentences = (text: string): string[] => {
-  // Split by newlines first (preserves numbers like 258.93)
-  const lines = text.split(/\n+/).filter(line => line.trim().length > 0)
-  
-  // If we have multiple lines, treat only complete lines as sentences
-  if (lines.length > 1) {
-    const completeLines = lines.filter(line => isCompleteSentence(line))
-    return completeLines.map(line => line.trim())
-  }
-  
-  // If single line, then split by sentence endings
-  // But be smarter about it - require space after punctuation to avoid splitting numbers
-  const sentences: string[] = []
-  const parts = text.split(/([.!?]\s+)/)
-  
-  let current = ''
-  for (let i = 0; i < parts.length; i++) {
-    current += parts[i]
-    // Only treat as sentence boundary if we have punctuation followed by space
-    if (/[.!?]\s+$/.test(current)) {
-      sentences.push(current.trim())
-      current = ''
-    }
-  }
-  
-  // Do NOT queue trailing incomplete fragments – only keep if it ends with punctuation
-  if (current.trim() && isCompleteSentence(current)) {
-    sentences.push(current.trim())
-  }
-  
-  return sentences.filter(s => s.length > 0)
-}
 
 export const TTSProvider = ({ children }: { children: ReactNode }) => {
   const [selectedVoiceUri, setSelectedVoiceUri] = useState<string | null>(null)
@@ -188,15 +144,29 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     }
     
     // Get next sentence
-    const sentence = sentenceQueueRef.current.shift()!
+    let sentence = sentenceQueueRef.current.shift()!
     setQueueLength(sentenceQueueRef.current.length)
     isProcessingQueueRef.current = true
     
     console.log('[TTS] Speaking sentence:', sentence.substring(0, 50))
-    setCurrentSentence(sentence)
+    
+    // Clean text for TTS - remove markdown and special characters that shouldn't be spoken
+    const cleanedSentence = sentence
+      .replace(/`/g, '') // Remove backticks
+      .replace(/\*\*/g, '') // Remove bold markers
+      .replace(/\*/g, '') // Remove italic markers/bullets
+      .replace(/_/g, '') // Remove underscores
+      .replace(/~/g, '') // Remove strikethrough
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Convert [text](url) to just text
+      .replace(/#{1,6}\s/g, '') // Remove markdown headers
+      .replace(/```[^`]*```/g, '') // Remove code blocks
+      .replace(/`([^`]+)`/g, '$1') // Convert inline code to plain text
+      .trim()
+    
+    setCurrentSentence(cleanedSentence)
     setIsSpeaking(true)
     
-    const utterance = new SpeechSynthesisUtterance(sentence)
+    const utterance = new SpeechSynthesisUtterance(cleanedSentence)
     
     // Set volume based on audioEnabled (0 = muted, 1 = full volume)
     utterance.volume = audioEnabled ? 1 : 0
@@ -282,7 +252,7 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     stop()
     
     // Split into sentences and add to queue
-    const sentences = extractSentences(text)
+    const sentences = splitIntoSentences(text)
     sentenceQueueRef.current = sentences
     setQueueLength(sentences.length)
     
@@ -348,8 +318,8 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     })
   }, [availableVoices, stop])
 
-  const handleNewText = useCallback((text: string) => {
-    console.log('[TTS] handleNewText() called with:', text.substring(0, 100))
+  const handleNewText = useCallback((text: string, forceSpeak: boolean = false) => {
+    console.log('[TTS] handleNewText() called with:', text.substring(0, 100), 'forceSpeak:', forceSpeak)
     console.log('[TTS] currentTextRef.current:', currentTextRef.current.substring(0, 100))
     
     // If text is empty or same as current, do nothing
@@ -359,7 +329,25 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     }
 
     currentTextRef.current = text
-    const newSentences = extractSentences(text)
+    
+    // If forceSpeak is true, skip sentence extraction and speak immediately
+    if (forceSpeak) {
+      console.log('[TTS] Force speak mode - adding text directly to queue')
+      sentenceQueueRef.current.push(text)
+      setQueueLength(sentenceQueueRef.current.length)
+      
+      // Update tracking to prevent re-speaking
+      lastSpokenSentencesRef.current = [text]
+      
+      // If not already processing, start the queue
+      if (!isProcessingQueueRef.current) {
+        console.log('[TTS] Starting queue processing')
+        processNextInQueue()
+      }
+      return
+    }
+    
+    const newSentences = splitIntoSentences(text)
     console.log('[TTS] Extracted sentences:', newSentences.length)
     console.log('[TTS] Last spoken sentences:', lastSpokenSentencesRef.current.length)
     

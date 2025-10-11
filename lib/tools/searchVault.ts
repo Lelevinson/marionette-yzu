@@ -22,11 +22,15 @@ async function searchVault(params: any) {
       }
     }
 
-    // Format results for display
+    // Format results for display with relevant chunks
     const formattedResults = results.map((page, index) => {
       const similarityPercent = (page.similarity * 100).toFixed(0)
-      return `[${index + 1}] ${page.title} [${similarityPercent}% match]\n   ${page.domain} • ${page.wordCount} words\n   ${page.excerpt}\n   ${page.url}`
-    }).join('\n\n')
+      const chunks = page.relevantChunks
+        .map((chunk, i) => `   ${i + 1}. ${chunk}`)
+        .join('\n\n')
+      
+      return `[${index + 1}] ${page.title} [${similarityPercent}% match]\n   ${page.domain} • ${page.wordCount} words\n   ${page.url}\n\n   Relevant content:\n${chunks}`
+    }).join('\n\n---\n\n')
 
     return {
       success: true,
@@ -37,6 +41,7 @@ async function searchVault(params: any) {
         url: p.url,
         domain: p.domain,
         excerpt: p.excerpt,
+        relevantChunks: p.relevantChunks,
         similarity: p.similarity,
         timestamp: p.timestamp
       })),

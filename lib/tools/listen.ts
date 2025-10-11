@@ -87,7 +87,7 @@ const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
 
 export const spec: ToolSpec = {
   name: 'listen',
-  description: 'Captures audio from the current browser tab for up to 10 seconds (maximum allowed duration)',
+  description: 'REQUIRED for audio questions: Captures and transcribes audio from the current browser tab. You cannot hear audio without this - use it whenever user asks about what\'s playing or audible. Max 10 seconds.',
   parameters: [
     {
       name: 'seconds',
@@ -98,7 +98,10 @@ export const spec: ToolSpec = {
   ],
   spokenLine: "Listening to the audio",
   examples: [
-    'User: "listen to what\'s playing" → listen with seconds: 5',
+    'User: "what do you hear?" → listen (REQUIRED to hear audio)',
+    'User: "what\'s playing?" → listen (REQUIRED to capture audio)',
+    'User: "listen to this" → listen with seconds: 5',
+    'User: "what\'s the audio saying?" → listen',
     'User: "record the audio for 10 seconds" → listen with seconds: 10',
     'User: "record for 30 seconds" → listen with seconds: 10 (maximum allowed is 10)',
     'User: "capture the sound" → listen (uses default 5 seconds)'

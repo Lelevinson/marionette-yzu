@@ -85,7 +85,9 @@
           "assets/dom-to-semantic-markdown.js",
           "assets/Hey-Marionette_en_wasm_v3_0_0.ppn",
           "assets/porcupine_params.pv",
-          "assets/Readability.js"
+          "assets/Readability.js",
+          "assets/*.ogg",
+          "assets/*.wav"
         ],
         "matches": [
           "<all_urls>"

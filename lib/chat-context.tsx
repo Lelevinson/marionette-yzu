@@ -4,11 +4,12 @@ import { streamResponse, getTokenUsage, destroySession as destroyAISession, inte
 import { parseToolCall, executeTool, detectInvalidToolFormat } from './tools'
 import { shouldSummarize, summarizeConversation, formatSummaryMessage } from './summarizer'
 import { executeUITool, validateUITools } from './ui-tools'
-import { getToolSpec } from './tool-registry'
+import { getToolSpec, getSpokenLine } from './tool-registry'
 import { isAIModelError, isWriterAPIError } from './errors'
 import { type AlertAction, openAIFlagsPage, openWriterAPIFlagsPage } from './alert-context'
 import { useTTS } from './tts-context'
 import { storeRating } from './rating-database'
+import { useSoundEffects } from './use-sound-effects'
 
 // Validate UI tools on module load
 validateUITools()
@@ -25,6 +26,7 @@ interface ChatState {
   isProcessing: boolean
   isWaitingForFirstChunk: boolean
   isSummarizing: boolean
+  isWarmingUp: boolean
   executingTool: string | null
   isInToolLoop: boolean
 }
@@ -37,6 +39,7 @@ type ChatAction =
   | { type: 'SET_PROCESSING'; payload: boolean }
   | { type: 'SET_WAITING'; payload: boolean }
   | { type: 'SET_SUMMARIZING'; payload: boolean }
+  | { type: 'SET_WARMING_UP'; payload: boolean }
   | { type: 'SET_EXECUTING_TOOL'; payload: string | null }
   | { type: 'SET_IN_TOOL_LOOP'; payload: boolean }
   | { type: 'APPLY_SUMMARY'; payload: { summaryMessage: Message } }
@@ -88,6 +91,9 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     case 'SET_SUMMARIZING':
       return { ...state, isSummarizing: action.payload }
     
+    case 'SET_WARMING_UP':
+      return { ...state, isWarmingUp: action.payload }
+    
     case 'SET_EXECUTING_TOOL':
       return { ...state, executingTool: action.payload }
     
@@ -111,7 +117,7 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     
     case 'RESET':
       console.log('[STOPBTN-REDUCER] RESET - clearing all state')
-      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false, executingTool: null, isInToolLoop: false }
+      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false, isWarmingUp: false, executingTool: null, isInToolLoop: false }
     
     default:
       return state
@@ -137,12 +143,16 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     isProcessing: false,
     isWaitingForFirstChunk: false,
     isSummarizing: false,
+    isWarmingUp: false,
     executingTool: null,
     isInToolLoop: false
   })
 
-  // Get TTS context to wait for readiness before tool execution
-  const { waitUntilReady: waitForTTS } = useTTS()
+  // Get TTS context to wait for readiness before tool execution and to queue system messages
+  const { waitUntilReady: waitForTTS, handleNewText: speakText } = useTTS()
+  
+  // Get sound effects for tool execution
+  const soundEffects = useSoundEffects()
 
   // Track if we need to rebuild AI context from restored messages
   const [needsContextRebuild, setNeedsContextRebuild] = React.useState(false)
@@ -235,6 +245,31 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }, 100)
   }, [state.messages])
 
+  // Helper to call streamResponse with warming up callbacks
+  const streamWithWarmup = async (
+    message: string, 
+    onChunk: (chunk: string) => void,
+    toolResult?: any
+  ) => {
+    return streamResponse(
+      message,
+      onChunk,
+      toolResult,
+      () => {
+        // onWarmingUp callback
+        console.log('[PROCESSING] Model warming up...')
+        dispatch({ type: 'SET_WARMING_UP', payload: true })
+        // Speak warmup message
+        waitForTTS().then(() => speakText('Loading model...', true))
+      },
+      () => {
+        // onWarmupComplete callback  
+        console.log('[PROCESSING] Model warmup complete')
+        dispatch({ type: 'SET_WARMING_UP', payload: false })
+      }
+    )
+  }
+
   const checkAndSummarize = async (): Promise<boolean> => {
     const tokenUsage = getTokenUsage()
     
@@ -280,6 +315,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_PROCESSING', payload: true })
     dispatch({ type: 'SET_WAITING', payload: true })
     console.log('[STOPBTN] isProcessing=true, isWaitingForFirstChunk=true')
+    
+    // Speak "Thinking..." message and play sound
+    waitForTTS().then(() => {
+      speakText('Thinking...', true)
+      soundEffects.play('thinking')
+    })
     
     // If we restored messages and haven't rebuilt context yet, prepend conversation history BEFORE adding new message
     let messageToSend = userInput
@@ -329,21 +370,24 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     
     try {
       console.log('[PROCESSING] Starting initial stream...')
-      const contextCount = await streamResponse(messageToSend, (chunk: string) => {
-        assistantContent += chunk
-        
-        if (assistantContent.length === chunk.length) {
-          // First chunk - add message
-          console.log('[PROCESSING] First chunk received')
-          dispatch({ type: 'SET_WAITING', payload: false })
-          const assistantMessage = createAssistantMessage(assistantContent)
-          assistantMessageId = assistantMessage.id
-          dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage })
-        } else {
-          // Update existing message
-          dispatch({ type: 'UPDATE_MESSAGE', payload: { id: assistantMessageId, content: assistantContent } })
+      const contextCount = await streamWithWarmup(
+        messageToSend, 
+        (chunk: string) => {
+          assistantContent += chunk
+          
+          if (assistantContent.length === chunk.length) {
+            // First chunk - add message
+            console.log('[PROCESSING] First chunk received')
+            dispatch({ type: 'SET_WAITING', payload: false })
+            const assistantMessage = createAssistantMessage(assistantContent)
+            assistantMessageId = assistantMessage.id
+            dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage })
+          } else {
+            // Update existing message
+            dispatch({ type: 'UPDATE_MESSAGE', payload: { id: assistantMessageId, content: assistantContent } })
+          }
         }
-      })
+      )
       
       console.log('[PROCESSING] Initial stream complete, content length:', assistantContent.length)
       
@@ -407,7 +451,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           let correctionResponseContent = ""
           const correctionResponseId = Date.now() + '_correction_' + loopCount
           
-          const correctionContextCount = await streamResponse(correctionMessage, (chunk: string) => {
+          const correctionContextCount = await streamWithWarmup(correctionMessage, (chunk: string) => {
             correctionResponseContent += chunk
             
             if (correctionResponseContent.length === chunk.length) {
@@ -475,7 +519,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
               let loopResponseContent = ""
               const loopResponseId = Date.now() + '_loopresponse_' + loopCount
               
-              const loopResponseCount = await streamResponse('Continue based on the warning above.', (chunk: string) => {
+              const loopResponseCount = await streamWithWarmup('Continue based on the warning above.', (chunk: string) => {
                 loopResponseContent += chunk
                 
                 if (loopResponseContent.length === chunk.length) {
@@ -517,7 +561,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
               let cycleResponseContent = ""
               const cycleResponseId = Date.now() + '_cycleresponse_' + loopCount
               
-              const cycleResponseCount = await streamResponse('Continue based on the warning above.', (chunk: string) => {
+              const cycleResponseCount = await streamWithWarmup('Continue based on the warning above.', (chunk: string) => {
                 cycleResponseContent += chunk
                 
                 if (cycleResponseContent.length === chunk.length) {
@@ -541,10 +585,23 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         console.log('[PROCESSING] Setting executingTool to:', toolCall.function)
         dispatch({ type: 'SET_EXECUTING_TOOL', payload: toolCall.function })
         
-        // Wait for TTS queue to clear before executing tool
-        console.log('[TOOL] Waiting for TTS to finish before executing tool...')
+        // Speak tool execution message and play sound
+        const spokenLine = getSpokenLine(toolCall.function, toolCall.arguments)
         await waitForTTS()
-        console.log('[TOOL] TTS finished, executing tool now')
+        speakText(spokenLine, true)
+        
+        // Wait for TTS queue to clear before executing tool
+        console.log('[TOOL] Waiting for TTS to finish speaking tool message...')
+        await waitForTTS()
+
+        // Play specific sound effects for certain tools
+        if (toolCall.function === 'listen') {
+          soundEffects.play('audioCapture')
+        } else if (toolCall.function === 'captureScreenshot') {
+          soundEffects.play('screenshot')
+        } else {
+          soundEffects.play('tool')
+        }
         
         // Check if tool requires user gesture
         const toolSpec = getToolSpec(toolCall.function)
@@ -561,6 +618,10 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         
         console.log('[PROCESSING] Tool execution complete, result:', toolResult?.success ? 'SUCCESS' : 'FAILED')
         
+        // Add 1 second delay for fancy visual effect
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        console.log('[TOOL] Visual delay complete, executing tool now')
+
         // Clear executing tool indicator
         console.log('[PROCESSING] Clearing executingTool')
         dispatch({ type: 'SET_EXECUTING_TOOL', payload: null })
@@ -585,7 +646,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         console.log(`[STOPBTN] About to call streamResponse...`)
         // IMPORTANT: Use a continuation prompt so the agent knows to keep executing
         const continuationPrompt = 'Continue executing the workflow based on the last tool result. Do not conclude. If the playbook has more steps, perform the next step.'
-        const followupContextCount = await streamResponse(continuationPrompt, (chunk: string) => {
+        const followupContextCount = await streamWithWarmup(continuationPrompt, (chunk: string) => {
           followupContent += chunk
           
           if (followupContent.length === chunk.length) {
@@ -614,7 +675,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           const continueMessageId = Date.now() + '_continue_' + loopCount
           
           const continuePrompt = "Please continue with your workflow based on the context summary above."
-          const continueContextCount = await streamResponse(continuePrompt, (chunk: string) => {
+          const continueContextCount = await streamWithWarmup(continuePrompt, (chunk: string) => {
             continueContent += chunk
             
             if (continueContent.length === chunk.length) {

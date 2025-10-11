@@ -21,7 +21,7 @@ const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
 
 export const spec: ToolSpec = {
   name: 'summarizePage',
-  description: 'Summarizes the content of the current web page using Chrome\'s built-in Summarizer API. Returns a concise summary of the main points.',
+  description: 'ONLY use when user EXPLICITLY asks for a summary. DO NOT call automatically after navigation, clicking, or opening pages. Summarizes the content of the current web page using Chrome\'s built-in Summarizer API.',
   parameters: [
     {
       name: 'type',
@@ -38,10 +38,11 @@ export const spec: ToolSpec = {
   ],
   examples: [
     'User: "summarize this page" → summarizePage',
-    'User: "what are the key points on this page?" → summarizePage',
-    'User: "give me a tl;dr of this article" → summarizePage with type="tl;dr"',
-    'User: "what\'s this page about?" → summarizePage',
-    'User: "give me a brief summary" → summarizePage with length="short"'
+    'User: "give me the key points" → summarizePage',
+    'User: "tl;dr" → summarizePage with type="tl;dr"',
+    'User: "find the login button" → findElements (NOT summarizePage)',
+    'User: "open that link" → openTab (NOT summarizePage)',
+    'User: "click submit" → clickElement (NOT summarizePage)'
   ],
   spokenLine: 'Summarizing page',
   requiresUserGesture: true  // Requires UI context for Summarizer API access

@@ -134,6 +134,85 @@ async function extractContent(tabId: number): Promise<{
       target: { tabId },
       func: () => {
         try {
+          // Extract structured data before Readability strips it
+          const structuredData: string[] = []
+          
+          // Extract emails from mailto links
+          const emailLinks = document.querySelectorAll('a[href^="mailto:"]')
+          const emails = new Set<string>()
+          emailLinks.forEach(link => {
+            const href = link.getAttribute('href')
+            if (href) {
+              const email = href.replace('mailto:', '').split('?')[0].trim()
+              if (email && email.includes('@')) {
+                emails.add(email)
+              }
+            }
+          })
+          
+          // Extract phone numbers from tel links
+          const phoneLinks = document.querySelectorAll('a[href^="tel:"]')
+          const phones = new Set<string>()
+          phoneLinks.forEach(link => {
+            const href = link.getAttribute('href')
+            if (href) {
+              const phone = href.replace('tel:', '').trim()
+              if (phone) {
+                phones.add(phone)
+              }
+            }
+          })
+          
+          // Also find emails in text content using regex
+          const textContent = document.body.innerText
+          const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g
+          const emailMatches = textContent.match(emailRegex)
+          if (emailMatches) {
+            emailMatches.forEach(email => emails.add(email))
+          }
+          
+          // Find phone numbers in text (North American format)
+          const phoneRegex = /\b(?:\+?1[-.]?)?\(?([0-9]{3})\)?[-.]?([0-9]{3})[-.]?([0-9]{4})\b/g
+          const phoneMatches = textContent.match(phoneRegex)
+          if (phoneMatches) {
+            phoneMatches.forEach(phone => phones.add(phone))
+          }
+          
+          // Extract social media links
+          const socialLinks = new Set<string>()
+          const socialPatterns = [
+            /twitter\.com\/[^\/\s"]+/i,
+            /x\.com\/[^\/\s"]+/i,
+            /linkedin\.com\/in\/[^\/\s"]+/i,
+            /linkedin\.com\/company\/[^\/\s"]+/i,
+            /facebook\.com\/[^\/\s"]+/i,
+            /instagram\.com\/[^\/\s"]+/i,
+            /github\.com\/[^\/\s"]+/i
+          ]
+          
+          document.querySelectorAll('a[href]').forEach(link => {
+            const href = link.getAttribute('href')
+            if (href) {
+              socialPatterns.forEach(pattern => {
+                const match = href.match(pattern)
+                if (match) {
+                  socialLinks.add(match[0])
+                }
+              })
+            }
+          })
+          
+          // Build structured data section
+          if (emails.size > 0) {
+            structuredData.push('\n\nContact Emails: ' + Array.from(emails).join(', '))
+          }
+          if (phones.size > 0) {
+            structuredData.push('\n\nContact Phones: ' + Array.from(phones).join(', '))
+          }
+          if (socialLinks.size > 0) {
+            structuredData.push('\n\nSocial Media: ' + Array.from(socialLinks).join(', '))
+          }
+          
           // Clone document for Readability
           const documentClone = document.cloneNode(true) as Document
           
@@ -156,16 +235,19 @@ async function extractContent(tabId: number): Promise<{
               return { success: false, error: 'Insufficient content' }
             }
             
+            const contentWithStructured = fallbackContent.replace(/\s+/g, ' ').trim() + structuredData.join('')
+            
             return {
               success: true,
               title: document.title,
-              content: fallbackContent.replace(/\s+/g, ' ').trim(),
+              content: contentWithStructured,
               excerpt: fallbackContent.slice(0, 200) + '...'
             }
           }
           
-          // Clean content
+          // Clean content and append structured data
           let cleanContent = article.textContent.replace(/\s+/g, ' ').trim()
+          cleanContent += structuredData.join('')
           
           if (cleanContent.length < 100) {
             return { success: false, error: 'Content too short' }

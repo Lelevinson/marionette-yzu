@@ -3,16 +3,16 @@ import { gsap } from 'gsap'
 import { cn } from '../lib/utils'
 
 interface WaveformProps {
-  state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool'
+  state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool' | 'warming'
   className?: string
   onClick?: () => void
 }
 
-const getWaveConfig = (state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool') => ({
+const getWaveConfig = (state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool' | 'warming') => ({
   barCount: 80,
   barWidth: 4,
   barSpacing: 2,
-  maxHeight: state === 'listening' ? 120 : state === 'speaking' ? 100 : state === 'thinking' ? 70 : state === 'tool' ? 90 : 40,
+  maxHeight: state === 'listening' ? 120 : state === 'speaking' ? 100 : state === 'warming' ? 80 : state === 'thinking' ? 70 : state === 'tool' ? 90 : 40,
   baseHeight: 4,
   colorStops: state === 'listening'
     ? [
@@ -27,6 +27,13 @@ const getWaveConfig = (state: 'idle' | 'listening' | 'thinking' | 'speaking' | '
         { stop: 0.3, color: [22, 163, 74] },  // Green 600
         { stop: 0.6, color: [21, 128, 61] },  // Green 700
         { stop: 1, color: [22, 101, 52] }     // Green 800
+      ]
+    : state === 'warming'
+    ? [
+        { stop: 0, color: [251, 146, 60] },   // Orange 400
+        { stop: 0.3, color: [249, 115, 22] }, // Orange 500
+        { stop: 0.6, color: [234, 88, 12] },  // Orange 600
+        { stop: 1, color: [194, 65, 12] }     // Orange 700
       ]
     : state === 'thinking'
     ? [
@@ -111,6 +118,10 @@ export function Waveform({ state, className, onClick }: WaveformProps) {
         const time = Date.now() * 0.005
         const wave = Math.sin(time + i * 0.4) * 0.6 + 0.4
         targetBarHeight = baseHeight + wave * maxHeight
+      } else if (state === 'warming') {
+        const time = Date.now() * 0.002
+        const wave = Math.sin(time + i * 0.25) * 0.5 + 0.5
+        targetBarHeight = baseHeight + wave * maxHeight
       } else if (state === 'thinking') {
         const time = Date.now() * 0.004
         const wave = Math.sin(time + i * 0.2) * 0.4 + 0.6
@@ -174,6 +185,10 @@ export function Waveform({ state, className, onClick }: WaveformProps) {
       } else if (state === 'speaking') {
         const time = Date.now() * 0.005
         const wave = Math.sin(time) * 0.6 + 0.4
+        targetCenterBarHeight = baseHeight + wave * maxHeight
+      } else if (state === 'warming') {
+        const time = Date.now() * 0.002
+        const wave = Math.sin(time) * 0.5 + 0.5
         targetCenterBarHeight = baseHeight + wave * maxHeight
       } else if (state === 'thinking') {
         const time = Date.now() * 0.004

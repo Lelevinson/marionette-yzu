@@ -4,6 +4,7 @@ import { parseToolCall, executeTool } from "../lib/tools"
 import { executeUITool } from "../lib/ui-tools"
 import { type Message } from "../lib/messages"
 import { useChatContext } from "../lib/chat-context"
+import { useTTS } from "../lib/tts-context"
 import { getToolNames, TOOL_REGISTRY, getToolSpec } from "../lib/tool-registry"
 import { testEmbeddings, testSimilarity } from "../lib/transformers-test"
 import { searchVault, getVaultStats, clearVault } from "../lib/vault"
@@ -828,6 +829,7 @@ const VaultDebugger = () => {
 
 export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScreenProps) => {
   const { state, sendMessage, resetChat, interruptChat, copyContext, rateMessage } = useChatContext()
+  const { stop, isSpeaking } = useTTS()
   const [input, setInput] = useState("")
   const [copyFeedback, setCopyFeedback] = useState("")
   
@@ -841,7 +843,12 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || state.isProcessing) return
+    if (!input.trim()) return
+
+    // Interrupt any ongoing processing or TTS before sending new message
+    if (state.isProcessing || isSpeaking) {
+      handleInterrupt()
+    }
 
     const userInput = input.trim()
     setInput("")
@@ -855,6 +862,7 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
   }
 
   const handleInterrupt = () => {
+    stop() // Stop TTS immediately
     interruptChat()
   }
 
@@ -880,7 +888,14 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
     const toolCall = !isToolResult ? parseToolCall(message.content) : null
     
     if (toolCall) {
-      const textBeforeToolCall = message.content.split('<function_call>')[0].trim()
+      // Extract text before tool call, handling code blocks
+      let contentToSplit = message.content
+      // Remove code block wrapper if present
+      const codeBlockMatch = contentToSplit.match(/```(?:tool_code|tool_call|function_call|json)\s*\n?(.*?)```/s)
+      if (codeBlockMatch) {
+        contentToSplit = codeBlockMatch[1]
+      }
+      const textBeforeToolCall = contentToSplit.split('<function_call>')[0].trim()
       
       return (
         <div key={message.id} className="mb-2 font-mono text-xs">
@@ -1078,6 +1093,14 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
               <>
                 <div className="text-yellow-400 mb-1">SUMMARIZING</div>
                 <div className="text-gray-400">Condensing conversation to save context...</div>
+              </>
+            ) : state.isWarmingUp ? (
+              <>
+                <div className="text-orange-400 mb-1 flex items-center gap-2">
+                  <span className="animate-pulse">●</span>
+                  WARMING UP
+                </div>
+                <div className="text-gray-400">Loading AI model for first time...</div>
               </>
             ) : state.executingTool ? (
               <>

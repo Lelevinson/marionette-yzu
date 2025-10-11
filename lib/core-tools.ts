@@ -3,7 +3,6 @@
 
 export const CORE_TOOLS = [
   'think',
-  'getPlaybook',
   'captureScreenshot',
   'openTab',
   'findElements',
@@ -13,4 +12,10 @@ export const CORE_TOOLS = [
   'switchTab',
   'listen',
   'pressKey',
+  "getAccessibilitySnapshot",
+  "storeMemory",
+  "translateText",
+  "detectLanguage",
+  "searchVault",
+  "getPlaybook",  
 ]

@@ -6,6 +6,8 @@
 
 **AI browser automation agent powered by Chrome's built-in Gemini Nano**
 
+**100% offline after one-time setup · Zero telemetry · Absolute privacy**
+
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
 ![On-Device AI](https://img.shields.io/badge/AI-On--Device-00ff88)
 ![Privacy First](https://img.shields.io/badge/Privacy-100%25_Offline-f59e0b)
@@ -31,12 +33,14 @@
   - [Multimodal Capabilities](#multimodal-understanding)
   - [Perception & Interaction](#perception-and-action-the-agent-webpage-interface)
   - [Playbook System](#aligning-the-model-with-playbooks)
-  - [Memory & Embeddings](#embeddings-and-token-efficiency)
+  - [Embeddings Architecture](#embeddings-why-they-massively-boost-gemini-nano)
+  - [Chunk-Based Retrieval](#auto-capture-vault-system-with-chunk-based-retrieval)
   - [Agent Alignment (Parsing, Loops, Summarization)](#tool-call-format-and-parsing)
   - [Tool Routing & Extensibility](#tool-routing-architecture)
   - [Rating System](#response-rating-and-future-alignment)
 - [Tech Stack](#tech-stack)
 - [Contributing](#contributing)
+- [E2E Testing](#e2e-testing)
 
 ---
 
@@ -44,12 +48,15 @@
 
 Marionette removes digital barriers by letting you navigate and control any website using natural language, entirely offline and private. Voice-controlled, agentic, with semantic memory.
 
+**Privacy-First Design:** After a one-time model download during setup (~2GB Gemini Nano + 23MB embeddings model), Marionette operates **100% offline**. Your conversations, captured pages, and browsing history never leave your device. No cloud inference, no telemetry, no API keys, no tracking. You can verify zero network activity by checking Chrome DevTools during normal operation.
+
 **Key Features:**
 - On-device AI agent (Gemini Nano via Chrome Prompt API)
 - 22 automation tools (click, fill, scroll, capture, search)
 - Agentic loopback system (up to 60 tool iterations per task)
 - Multimodal input (text, voice, image, audio)
-- Semantic memory vault with 384D embeddings
+- Semantic memory vault with chunk-based RAG retrieval
+- 384D embeddings via Transformers.js (all-MiniLM-L6-v2)
 - Playbook-guided workflows for complex tasks
 - 100% offline, zero telemetry
 
@@ -207,18 +214,48 @@ By deferring specialized tools to playbooks, we reclaim ~1,550 tokens—roughly 
 <img src="./diagrams/playbook_system.png" alt="Playbook System" height="400" />
 </div>
 
-### Embeddings and Token Efficiency
+### Embeddings: Why They Massively Boost Gemini Nano
 
-We use Transformers.js with the all-MiniLM-L6-v2 model to generate 384-dimensional embeddings for both user memories and captured web pages. This is perfect for a small model: instead of dumping raw text into the prompt, we search semantically and return only the relevant snippets.
+Gemini Nano is powerful but constrained by a 9,216-token context window. Without embeddings, retrieving information from captured pages would require dumping entire articles into the prompt, quickly exhausting available tokens and overwhelming the small model. Embeddings solve this by enabling **semantic search** that returns only the most relevant content.
+
+**The Technical Stack:**
+
+We use **Transformers.js** running the **all-MiniLM-L6-v2** model entirely in-browser. This is a sentence transformer that converts text into 384-dimensional vectors capturing semantic meaning. The model is compact (23MB ONNX) and fast (100-300ms per embedding), making it perfect for real-time use in a Chrome extension.
+
+**Configuration for Browser Extension Environment:**
+
+```typescript
+// From lib/embeddings.ts
+env.allowLocalModels = false        // Use CDN delivery (Hugging Face)
+env.backends.onnx.wasm.numThreads = 1   // Single-threaded execution
+env.backends.onnx.wasm.proxy = false    // No worker proxy (avoids CSP issues)
+```
+
+These settings are critical for Chrome extensions:
+- **No local models**: The model downloads from CDN on first use and caches in browser storage
+- **Single-threaded**: Runs on the main thread to avoid Content Security Policy restrictions in extension contexts
+- **No worker proxy**: Direct execution prevents worker-related CSP violations
+
+The model loads lazily using a singleton pattern—the first `generateEmbedding()` call triggers a one-time 23MB download, then subsequent calls reuse the cached pipeline. Inference happens via ONNX Runtime compiled to WebAssembly, running entirely offline after initial download.
 
 **Token Savings with Semantic Search:**
 
-| Approach | Example: "What did I read about React hooks?" | Tokens Used |
-|----------|----------------------------------------------|-------------|
-| Dump raw pages | Include full text of 3-5 relevant articles | 4,000-8,000 tokens |
-| Semantic search | Return titles, URLs, excerpts (top 3 matches) | 150-300 tokens |
+| Approach | Example: "What did I read about React hooks?" | Tokens Used | Context Available |
+|----------|----------------------------------------------|-------------|-------------------|
+| Dump raw pages | Include full text of 3-5 relevant articles | 4,000-8,000 tokens | 1,216-5,216 tokens (13-57%) |
+| Semantic search | Return titles, URLs, relevant chunks (top 3) | 150-300 tokens | 8,916-9,066 tokens (97-98%) |
 
-A single large article (5,000 words) would consume ~6,500 tokens if included raw. With embeddings, we return a 50-word excerpt plus metadata, costing ~80 tokens. The model gets the information it needs without drowning in text.
+A single large article (5,000 words) would consume ~6,500 tokens if included raw—**71% of Nano's entire context window**. With embeddings and chunk-based retrieval, we return 2-3 relevant snippets plus metadata, costing ~200 tokens—**just 2% of the context**.
+
+This isn't just an optimization; it's what makes complex agentic workflows possible. Without embeddings, Nano would max out its context after retrieving one or two pages. With embeddings, it can reference dozens of captured pages and still have 90%+ of its context available for the actual conversation and tool execution.
+
+**How Embeddings Enable Better Reasoning:**
+
+1. **Semantic understanding**: Finds "contact information" even if the text says "reach us" or "get in touch"
+2. **Precision**: Returns only the paragraph that answers the query, not the entire 5,000-word article
+3. **Context preservation**: Nano can maintain long conversations with memory retrieval, tool execution history, and page references
+4. **Faster responses**: Less text to process means quicker inference times
+5. **Reduced hallucination**: The model sees actual relevant text, not a summary or approximation
 
 ### Conversation Summarization
 
@@ -263,23 +300,170 @@ This alignment ensures the agent doesn't lose track mid-task or ask users to rep
 
 Memory comes in two flavors for different needs. Short user facts (like "email is john@example.com") go into agent memory in Chrome storage, with optional embeddings for quick semantic lookup. Webpage captures get cleaned with Readability.js, embedded via Transformers.js, and stashed in IndexedDB for cosine-similarity searches. The prompt pulls in agent memory summaries; vault queries happen on-demand with searchVault.
 
-### Auto-Capture Vault System
+### Auto-Capture Vault System with Chunk-Based Retrieval
 
-Every time you navigate to a new page, the extension waits three seconds for the page to settle, then automatically captures it in the background. We inject Readability.js to extract clean content—stripping ads, navigation, and cruft—and pass the text to Transformers.js running the all-MiniLM-L6-v2 model. It generates a 384-dimensional embedding in 100-300ms, which we store alongside the URL, title, timestamp, and content in IndexedDB. This happens silently; you don't notice it.
+Every time you navigate to a new page, the extension waits three seconds for the page to settle, then automatically captures it in the background. We inject Readability.js to extract clean content—stripping ads, navigation, and cruft—and pass the text to Transformers.js running the all-MiniLM-L6-v2 model.
 
-When the agent needs information—"What did I read about React hooks?"—it calls searchVault("React hooks"), which generates an embedding for the query and performs cosine similarity search across all stored entries. Results above 30% similarity are returned, ranked by relevance. The agent gets back the URLs, titles, excerpts, and similarity scores—not the full content. It can describe what you read, when, and point you to the source. This is semantic search done right: the agent finds by meaning, not keyword matching.
+**How Storage Works:**
 
-The vault grows indefinitely (IndexedDB has no practical storage limit in extensions), though we could add cleanup logic later. For now, the assumption is: more history is better.
+1. **Structured data extraction**: Before processing, extract and preserve contact information:
+   - Email addresses (from `mailto:` links and regex patterns)
+   - Phone numbers (from `tel:` links and North American format detection)
+   - Social media profiles (Twitter, LinkedIn, Facebook, Instagram, GitHub)
+2. **Content cleaning**: Use Readability.js to extract main content, strip ads and navigation
+3. **Append structured data**: Add extracted contact info to content in a searchable format
+4. **Page-level embedding**: Generate one embedding for the entire page (used for broad relevance ranking)
+5. **Content chunking**: Split the cleaned text into overlapping 500-character chunks with 100-character overlap
+6. **Chunk-level embeddings**: Generate a 384D embedding for each chunk (typically 8-15 chunks per page)
+7. **IndexedDB storage**: Store both the page metadata and all chunks with their embeddings
+
+The structured data extraction solves a critical problem: email addresses and phone numbers are often hidden in HTML attributes (`<a href="mailto:doctor@example.com">Contact</a>`). Without extracting them first, Readability.js would strip out "doctor@example.com" and only keep "Contact". Now when you search for "email" or "contact", the vault returns the actual email addresses and phone numbers.
+
+The overlap ensures that content spanning chunk boundaries isn't lost. A 5,000-word article becomes ~10 chunks, each with its own semantic vector. Storage happens silently in the background—you don't notice it.
+
+**How Retrieval Works:**
+
+When the agent needs information—"What did I read about React hooks?"—it calls `searchVault("React hooks")`:
+
+1. **Query embedding**: Generate a 384D vector for the search query
+2. **Chunk-level search**: Compare query embedding against **all chunks** from all pages using cosine similarity
+3. **Filtering**: Keep only chunks with >20% similarity (configurable threshold)
+4. **Grouping**: Group matched chunks by their source page
+5. **Ranking**: Take the top 2-3 most relevant chunks per page
+6. **Results**: Return pages ranked by their best-matching chunk, with the actual relevant text snippets
+
+**What the Agent Receives:**
+
+Example 1 - Technical content:
+```
+[1] Understanding React Hooks [78% match]
+   react.dev • 4,523 words
+   https://react.dev/learn/hooks
+
+   Relevant content:
+   1. Hooks are functions that let you "hook into" React state and 
+      lifecycle features from function components. useState is the most 
+      common hook, allowing you to add state to function components...
+
+   2. The useEffect hook lets you perform side effects in function 
+      components. It serves the same purpose as componentDidMount, 
+      componentDidUpdate, and componentWillUnmount...
+```
+
+Example 2 - Contact information (query: "new brunswick doctor email"):
+```
+[1] Family Medicine New Brunswick [85% match]
+   www.fmnb.ca • 1,247 words
+   https://www.fmnb.ca/contact
+
+   Relevant content:
+   1. For inquiries about family medicine services in New Brunswick, 
+      please contact our central office. We're here to help connect 
+      you with a family doctor.
+   
+   2. Contact Emails: info@fmnb.ca, referrals@fmnb.ca, admin@fmnb.ca
+      Contact Phones: (506) 555-1234, 1-800-555-FMNB
+```
+
+The structured data extraction ensures that email addresses, phone numbers, and social media links are preserved and searchable, even when they're hidden in HTML attributes.
+
+**Why This is Better Than Simple Excerpt-Based Search:**
+
+| Approach | What Agent Gets | Problem |
+|----------|-----------------|---------|
+| Page-level embedding only | Title + first 200 characters | Relevant content buried on page 3 is missed |
+| Full page dump | Entire 5,000-word article | Uses 6,500 tokens (71% of Nano's context) |
+| **Chunk-based retrieval** | **Title + 2-3 relevant ~500-char chunks** | **Only relevant sections, ~200 tokens (2% of context)** |
+
+If a page discusses React hooks in paragraph 47 of a long article, traditional search might return the page with an irrelevant excerpt from paragraph 1. Chunk-based retrieval finds paragraph 47 specifically because it has the highest semantic similarity to your query.
+
+**Storage Architecture:**
+
+```
+IndexedDB: marionette_vault (v2)
+├─ pages store
+│  ├─ id, url, title, domain
+│  ├─ content (full text with appended structured data, max 5,000 words)
+│  │   • Main content from Readability.js
+│  │   • Extracted emails (from mailto: links + regex)
+│  │   • Extracted phones (from tel: links + regex)
+│  │   • Social media links (Twitter, LinkedIn, etc.)
+│  ├─ embedding (384D, page-level)
+│  └─ timestamp, wordCount
+│
+└─ chunks store
+   ├─ id (pageId-chunkIndex)
+   ├─ pageId (foreign key)
+   ├─ content (~500 chars, may include structured data)
+   ├─ embedding (384D, chunk-level)
+   └─ chunkIndex, startChar, endChar
+```
+
+The vault grows indefinitely (IndexedDB has no practical storage limit in extensions), though cleanup logic exists to cap storage at 100 pages if needed. The assumption is: more history is better, and chunk-level search makes it all accessible.
 
 <div align="center">
 <img src="./diagrams/semantic_vault.png" alt="Semantic Vault" height="400" />
 </div>
 
-### Privacy and Security
+<div align="center">
+<img src="./diagrams/chunk_retrieval.png" alt="Chunk-Based Retrieval" height="400" />
+</div>
 
-Everything runs offline. Gemini Nano executes entirely on-device via Chrome's Prompt API—no network calls, no telemetry, no cloud inference. The all-MiniLM-L6-v2 embedding model loads from Transformers.js and runs locally in the browser. Your conversation history, captured pages, and embeddings never leave your machine.
+<div align="center">
+<img src="./diagrams/embeddings_architecture.png" alt="Embeddings Architecture" height="400" />
+</div>
 
-IndexedDB security is sandboxed to the extension origin. No website can access the vault; no other extension can read it. Only this extension, running in your browser, has access. If you uninstall the extension, the data is purged. It's as private as it gets: local storage, local models, local execution. The trade-off is performance (inference takes 1-3 seconds), but the gain is absolute privacy.
+### Privacy and Security: 100% Offline After Initial Setup
+
+Marionette is designed for absolute privacy. After a one-time setup, **everything runs entirely on your device with zero network communication**.
+
+**The One-Time Model Download (During Onboarding):**
+
+On first use, the extension downloads two models:
+1. **Gemini Nano**: Downloaded by Chrome itself when you enable the required flags. This happens through Chrome's built-in model distribution system (not controlled by this extension). Size: ~1.5-2GB, downloaded once per Chrome installation.
+2. **all-MiniLM-L6-v2 embeddings model**: Downloaded via Transformers.js from Hugging Face CDN on first call to `generateEmbedding()`. Size: ~23MB ONNX model, cached in browser storage after first download.
+
+Both downloads happen automatically during setup. Gemini Nano is managed by Chrome's Prompt API infrastructure. The embeddings model downloads from CDN (Hugging Face) and caches locally using browser's built-in caching mechanisms.
+
+**After Initial Setup - Fully Offline:**
+
+Once models are downloaded, **no network activity occurs**:
+
+| Component | Network Usage | Privacy Impact |
+|-----------|---------------|----------------|
+| Gemini Nano inference | **Zero** - runs via Chrome's on-device Prompt API | Your prompts never leave your machine |
+| Embeddings generation | **Zero** - ONNX Runtime WASM runs locally | Text embeddings computed on-device |
+| Vault storage | **Zero** - IndexedDB is local browser storage | Captured pages stay on your disk |
+| Conversation history | **Zero** - stored in extension's local storage | Chat logs are private |
+| Tool execution | **Zero** - DOM manipulation, local APIs only | No telemetry or analytics |
+| Page captures | **Zero** - Readability.js runs in-page | Content never sent anywhere |
+
+**What This Means:**
+
+- **No cloud inference**: Your conversations aren't sent to any server
+- **No telemetry**: We don't collect usage statistics, crash reports, or analytics
+- **No API keys**: No accounts, no authentication, no external services
+- **No tracking**: The extension doesn't phone home or report anything
+- **Airplane mode compatible**: After initial setup, works completely offline (even disconnected from internet)
+
+You can verify this by opening Chrome DevTools Network tab while using Marionette—you'll see zero network requests from the extension during normal operation.
+
+**Storage Security:**
+
+- **IndexedDB sandboxing**: The vault (captured pages, embeddings, chunks) is stored in IndexedDB, which is sandboxed to the extension's origin. No website can read it, no other extension can access it.
+- **Extension storage isolation**: Conversation history and agent memories use Chrome's extension storage API, isolated from web pages and other extensions.
+- **Data deletion**: Uninstalling the extension immediately purges all stored data (conversations, vault, memories, embeddings).
+
+**The Privacy Trade-Off:**
+
+Running everything on-device means:
+- ✅ **Absolute privacy**: Your data never leaves your machine
+- ✅ **No subscription**: No API costs or usage limits
+- ✅ **Works offline**: No internet dependency after setup
+- ⚠️ **Slower inference**: 1-3 seconds per response vs. <1s for cloud models
+- ⚠️ **Smaller model**: Gemini Nano (3B parameters) vs. GPT-4 (hundreds of billions)
+
+For many users, the privacy benefit far outweighs the performance trade-off. You're running a capable AI agent with zero data leaving your device—that's unprecedented.
 
 ### Tool Call Format and Parsing
 
@@ -420,8 +604,9 @@ marionette/
 ├── lib/
 │   ├── ai.ts               # Prompt API integration, streaming, multimodal
 │   ├── chat-context.tsx    # Agent loop state, loopback logic, summarization
-│   ├── embeddings.ts       # Transformers.js, cosine similarity
-│   ├── vault.ts            # Semantic vault (IndexedDB)
+│   ├── embeddings.ts       # Transformers.js, cosine similarity, all-MiniLM-L6-v2
+│   ├── vault.ts            # Semantic vault with chunk-based RAG (IndexedDB)
+│   ├── auto-capture.ts     # Background page capture system
 │   ├── tools.ts            # Tool parsing and execution
 │   ├── tool-registry.ts    # Central tool registry, validation
 │   ├── core-tools.ts       # Tools exposed in system prompt by default
@@ -622,7 +807,7 @@ pnpm build
 **Medium Priority:**
 - UI polish (animations, better visualizations)
 - More perception tools (DOM query capabilities, XPath support)
-- Vault enhancements (cleanup logic, export/import)
+- Vault enhancements (export/import, chunk size optimization, re-ranking algorithms)
 - Rating analysis (scripts to extract patterns from stored ratings)
 
 **Experimental:**
@@ -630,6 +815,41 @@ pnpm build
 - Multi-agent collaboration (coordinating multiple Nano instances)
 - Advanced memory (vector clustering, topic modeling)
 - Tool composition (combining simple tools into complex ones)
+
+---
+
+## E2E Testing
+
+Marionette includes a test mode for end-to-end testing of voice-driven workflows using predefined inputs.
+
+### Configuration
+
+Edit `lib/e2e-config.ts`:
+
+```typescript
+export const E2E_TEST_CONFIG = {
+  TEST_MODE_ENABLED: true,  // Set to false for production
+  TEST_PHRASES: [
+    "find the model architecture section",
+    "summarize this page",
+    // Add test phrases for your workflow
+  ],
+  INITIAL_DELAY: 2000,      // Delay before phrase starts (ms)
+  WORD_DELAY: 300,          // Delay between words (ms)
+  AUTO_END_DELAY: 1000,     // Delay before auto-ending (ms)
+}
+```
+
+### Usage
+
+1. Enable test mode in `lib/e2e-config.ts` by setting `TEST_MODE_ENABLED: true`
+2. Add test phrases to the `TEST_PHRASES` array
+3. Load the extension and click the microphone button
+4. Each click uses the next phrase sequentially (cycles after the last phrase)
+5. Phrases stream word-by-word, matching live speech recognition behavior
+6. The agent processes the input and executes the workflow
+
+This enables reliable testing of agent workflows, tool usage patterns, and response quality with controlled inputs.
 
 ---
 

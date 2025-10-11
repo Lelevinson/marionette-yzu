@@ -57,12 +57,12 @@ async function fillInput(params: { index: number, value: string }) {
 
 export const spec: ToolSpec = {
   name: 'fillInput',
-  description: 'Fills a text input or textarea on the page with a value',
+  description: 'Fills a text input or textarea on the page with a value. Must call findElements or getAccessibilitySnapshot first to get element indices.',
   parameters: [
     {
       name: 'index',
       type: 'number',
-      description: 'The index of the input element (from getAccessibilitySnapshot)',
+      description: 'The index of the input element (from findElements or getAccessibilitySnapshot)',
       required: true
     },
     {
@@ -74,9 +74,9 @@ export const spec: ToolSpec = {
   ],
   spokenLine: "Entering {value}",
   examples: [
-    'User: "search for AI podcasts" → findElements "search box" gets [3] COMBOBOX, then fillInput with index: 3, value: "AI podcasts"',
-    'User: "fill the email field with test@example.com" → findElements "email", then fillInput with index and value',
-    'After seeing "[3] TEXTBOX: Email" → fillInput with index: 3, value: "test@example.com"'
+    'User: "search for AI podcasts" → findElements "search box" returns [3] COMBOBOX, then fillInput with index: 3, value: "AI podcasts"',
+    'User: "type my email" → findElements "email" returns [7] TEXTBOX, then fillInput with index: 7, value: stored email',
+    'findElements shows "[42] TEXTBOX: Search" → Use index: 42 (the number in brackets)'
   ]
 }
 

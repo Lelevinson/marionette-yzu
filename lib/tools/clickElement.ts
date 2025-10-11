@@ -17,7 +17,7 @@ async function clickElement(params: { index: number }) {
         const element = document.querySelector(`[data-marionette-${index}]`) as HTMLElement
         
         if (!element) {
-          return { success: false, error: `Element with index ${index} not found. Run getAccessibilitySnapshot first.` }
+          return { success: false, error: `Element with index ${index} not found. Call findElements or getAccessibilitySnapshot first to get current element indices.` }
         }
         
         // Check if element is disabled
@@ -60,19 +60,20 @@ async function clickElement(params: { index: number }) {
 
 export const spec: ToolSpec = {
   name: 'clickElement',
-  description: 'Clicks an interactive element on the page by its index from getAccessibilitySnapshot',
+  description: 'Clicks an interactive element on the page by its index. Must call findElements or getAccessibilitySnapshot first to get element indices.',
   parameters: [
     {
       name: 'index',
       type: 'number',
-      description: 'The index of the element to click (from getAccessibilitySnapshot)',
+      description: 'The index of the element to click (from findElements or getAccessibilitySnapshot)',
       required: true
     }
   ],
   spokenLine: "Clicking",
   examples: [
-    'User: "click the submit button" → First getAccessibilitySnapshot, then clickElement with the button\'s index',
-    'After seeing snapshot with "[5] BUTTON: Submit" → clickElement with index: 5'
+    'User: "click the submit button" → findElements "submit button" returns [5] BUTTON, then clickElement with index: 5',
+    'User: "click login" → findElements "login" shows [2] LINK, then clickElement with index: 2',
+    'findElements shows "[11] LINK: Model Architecture" → Use index: 11 (the number in brackets)'
   ]
 }
 

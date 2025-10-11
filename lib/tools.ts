@@ -5,15 +5,7 @@ export interface ToolCall {
 }
 
 export function detectInvalidToolFormat(content: string): string | null {
-  // Check for common wrong formats - code blocks with backticks
-  if (content.includes('```tool_call') || content.includes('```tool_code') || content.includes('```function_call') || (content.includes('```json') && content.includes('function'))) {
-    return `STOP using code blocks! Just write this directly (no backticks, no code blocks):
-
-<function_call>{"function": "findElements", "arguments": {"query": "email"}}</function_call>
-
-Do NOT write: \`\`\`tool_call or \`\`\`tool_code or \`\`\`json or \`\`\`function_call
-Just write the <function_call> directly in your response.`
-  }
+  // Only check for print() syntax - we'll handle code blocks in parseToolCall
   if (/print\s*\(/.test(content) && /get|click|fill|open/i.test(content)) {
     return 'Invalid format detected: print() syntax - must use <function_call> format'
   }
@@ -75,10 +67,23 @@ export function parseToolCall(content: string): ToolCall | null {
     }
   }
   
-  // Try correct format first: <function_call>
-  if (content.includes('<function_call>')) {
+  // First, strip code blocks if present
+  // Handle formats like:
+  // ```tool_code
+  // <function_call>...</function_call>
+  // ```
+  let processedContent = content
+  const codeBlockPattern = /```(?:tool_code|tool_call|function_call|json)\s*\n?(.*?)```/s
+  const codeBlockMatch = processedContent.match(codeBlockPattern)
+  if (codeBlockMatch) {
+    console.log('[parseToolCall] Found code block wrapper, extracting content')
+    processedContent = codeBlockMatch[1].trim()
+  }
+  
+  // Try correct format: <function_call>
+  if (processedContent.includes('<function_call>')) {
     console.log('[parseToolCall] Found <function_call> tag')
-    const match = content.match(/<function_call>(.*?)<\/function_call>/s)
+    const match = processedContent.match(/<function_call>(.*?)<\/function_call>/s)
     if (match) {
       console.log('[parseToolCall] Regex matched successfully')
       return processAndParseJSON(match[1])
@@ -95,6 +100,24 @@ export function parseToolCall(content: string): ToolCall | null {
     if (match) {
       console.log('[parseToolCall] Malformed format regex matched, extracting JSON')
       return processAndParseJSON(match[1])
+    }
+  }
+  
+  // Try raw JSON in code blocks (no <function_call> tags)
+  // This handles format like: ```tool_code\n{"tool": "findElements", "arguments": {...}}\n```
+  if (processedContent.trim().startsWith('{') && (processedContent.includes('"tool"') || processedContent.includes('"function"'))) {
+    console.log('[parseToolCall] Found raw JSON format (possibly with "tool" instead of "function")')
+    try {
+      // Normalize "tool" to "function" if present
+      let jsonStr = processedContent.trim()
+      jsonStr = jsonStr.replace(/"tool"\s*:/g, '"function":')
+      const result = processAndParseJSON(jsonStr)
+      if (result) {
+        console.log('[parseToolCall] Successfully parsed raw JSON format')
+        return result
+      }
+    } catch (e) {
+      console.warn('[parseToolCall] Failed to parse raw JSON format:', e)
     }
   }
   

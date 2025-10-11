@@ -3,6 +3,7 @@ import { Bug, Mic, RotateCcw, Maximize2, Settings, Flag, Volume2, VolumeX, Squar
 import { useVoiceInput } from "../lib/use-voice-input"
 import { useChatContext } from "../lib/chat-context"
 import { useTTS } from "../lib/tts-context"
+import { useSoundEffects } from "../lib/use-sound-effects"
 import { openPermissionsPage, openAIFlagsPage } from "../lib/alert-context"
 import { useOnboarding } from "../components/onboarding/onboarding-provider"
 import { OnboardingFlow } from "../components/onboarding/onboarding-flow"
@@ -13,56 +14,11 @@ import { Waveform } from "../components/waveform"
 import { RatingButtons } from "../components/rating-buttons"
 import { parseToolCall } from "../lib/tools"
 import { getSpokenLine } from "../lib/tool-registry"
+import { getCompleteSentences } from "../lib/sentence-parser"
 
 interface MainScreenProps {
   onNavigateToDebug: () => void
   fullHeight?: boolean
-}
-
-// Heuristic: consider a sentence complete when it ends with ! or ?;
-// for '.' require that the token before '.' is preceded by start-of-line or whitespace
-// to avoid treating emails/URLs like "name@domain." as sentences during streaming.
-const isCompleteSentence = (s: string): boolean => {
-  const t = s.trim()
-  if (!t) return false
-  // Never treat ellipses as end of sentence in streaming
-  if (/\.\.\.$/.test(t)) return false
-  if (/[!?]"?$/.test(t)) return true
-  // For a trailing period, require whitespace or start before the last token
-  return /(?:^|\s)\S+\."?$/.test(t)
-}
-
-const getCompleteSentences = (text: string): string => {
-  // Split by newlines first (preserves numbers like 258.93)
-  const lines = text.split(/\n+/).filter(line => line.trim().length > 0)
-  
-  // If we have multiple lines, treat only complete lines as sentences
-  if (lines.length > 1) {
-    const completeLines = lines.filter(line => isCompleteSentence(line))
-    return completeLines.map(line => line.trim()).join(' ')
-  }
-  
-  // If single line, then split by sentence endings
-  // But be smarter about it - require space after punctuation to avoid splitting numbers
-  const sentences: string[] = []
-  const parts = text.split(/([.!?]\s+)/)
-  
-  let current = ''
-  for (let i = 0; i < parts.length; i++) {
-    current += parts[i]
-    // Only treat as sentence boundary if we have punctuation followed by space
-    if (/[.!?]\s+$/.test(current)) {
-      sentences.push(current.trim())
-      current = ''
-    }
-  }
-  
-  // Do NOT queue trailing incomplete fragments – only keep if it ends with punctuation
-  if (current.trim() && isCompleteSentence(current)) {
-    sentences.push(current.trim())
-  }
-  
-  return sentences.filter(s => s.length > 0).join(' ')
 }
 
 export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreenProps) => {
@@ -70,10 +26,15 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
   const { isListening, transcript, handleMicClick } = useVoiceInput()
   const { state, sendMessage, resetChat, rateMessage, isInitialLoadComplete, interruptChat } = useChatContext()
   const { handleNewText, stop, currentSentence, isSpeaking, audioEnabled, setAudioEnabled } = useTTS()
+  const soundEffects = useSoundEffects()
   const [textInput, setTextInput] = useState("")
   
   // Track last spoken assistant message to avoid replaying
   const lastSpokenTextRef = useRef<string>('')
+  const wasSpeakingRef = useRef(false)
+  
+  // Track last displayed sentence to keep showing it when queue empties
+  const [lastDisplayedSentence, setLastDisplayedSentence] = useState<string>('')
   
   // Get latest context count
   const latestContextCount = useMemo(() => {
@@ -110,7 +71,15 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       const msg = state.messages[i]
       if (msg.role === 'assistant' && !msg.content.startsWith('[TOOL RESULT]')) {
         const toolCall = parseToolCall(msg.content)
-        const textBeforeToolCall = msg.content.split('<function_call>')[0].trim()
+        
+        // Extract text before tool call, handling code blocks
+        let contentToSplit = msg.content
+        // Remove code block wrapper if present
+        const codeBlockMatch = contentToSplit.match(/```(?:tool_code|tool_call|function_call|json)\s*\n?(.*?)```/s)
+        if (codeBlockMatch) {
+          contentToSplit = codeBlockMatch[1]
+        }
+        const textBeforeToolCall = contentToSplit.split('<function_call>')[0].trim()
         
         // If message only contains function call syntax (no text before it), don't display the raw syntax
         let displayText = textBeforeToolCall
@@ -132,13 +101,6 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
     return { id: '', text: '', toolCall: null, spokenLine: null, rating: null }
   }, [state.messages])
 
-  // Track if we're currently speaking a tool's spokenLine
-  const isSpeakingToolAction = useMemo(() => {
-    return isSpeaking && latestResponse.spokenLine && currentSentence === latestResponse.spokenLine
-  }, [isSpeaking, latestResponse.spokenLine, currentSentence])
-
-  // Display only current sentence being spoken
-  const displayText = currentSentence
 
   // TTS effect - handle new text (only if it's different from what we've seen before)
   useEffect(() => {
@@ -156,30 +118,64 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       lastSpokenTextRef.current = latestResponse.text
       handleNewText(latestResponse.text)
     } else if (latestResponse.spokenLine) {
-      // Tool call - speak the spoken line
+      // Tool call - speak the spoken line (force speak since it might not end with punctuation)
       lastSpokenTextRef.current = latestResponse.spokenLine
-      handleNewText(latestResponse.spokenLine)
+      handleNewText(latestResponse.spokenLine, true)
     }
-  }, [isInitialLoadComplete, latestResponse.text, latestResponse.spokenLine, handleNewText, stop])
+  }, [isInitialLoadComplete, latestResponse.text, latestResponse.spokenLine, handleNewText])
 
-  // Determine waveform state - pure event-driven, no complex conditions
+  // Update last displayed sentence when currentSentence changes
+  useEffect(() => {
+    if (currentSentence) {
+      setLastDisplayedSentence(currentSentence)
+    }
+  }, [currentSentence])
+
+  // Response complete sound - play when TTS finishes speaking
+  useEffect(() => {
+    // Detect when speaking stops (transition from true to false)
+    if (wasSpeakingRef.current && !isSpeaking && !state.isProcessing && audioEnabled) {
+      // Only play if we were speaking an actual response (not system message)
+      if (latestResponse.text || latestResponse.spokenLine) {
+        soundEffects.play('warmup') // Using long-expected-548.ogg
+      }
+    }
+    wasSpeakingRef.current = isSpeaking
+  }, [isSpeaking, state.isProcessing, latestResponse.text, latestResponse.spokenLine, audioEnabled, soundEffects])
+
+  // Determine waveform state - follow TTS/speaking state, not backend processing state
   const waveformState = isListening 
-    ? 'listening' 
-    : isSpeakingToolAction
-    ? 'tool'
+    ? 'listening'
+    : isSpeaking
+    ? 'speaking'  // If TTS is active, always show speaking state
+    : state.isWarmingUp
+    ? 'warming'
     : state.executingTool
     ? 'tool'
     : state.isProcessing
     ? 'thinking'
-    : isSpeaking 
-    ? 'speaking'
     : 'idle'
-  
-  // Show processing indicator whenever agent is working (including during loopbacks)
-  const showProcessingIndicator = state.isProcessing && !isListening && !transcript
+
+  // Match text color to waveform state
+  const getTextColor = (state: typeof waveformState) => {
+    switch (state) {
+      case 'listening': return 'text-red-500'      // Red 500
+      case 'speaking': return 'text-green-500'     // Green 500
+      case 'warming': return 'text-orange-400'     // Orange 400
+      case 'thinking': return 'text-blue-500'      // Blue 500
+      case 'tool': return 'text-purple-500'        // Purple 500
+      case 'idle': return 'text-gray-600'          // Gray 600
+      default: return 'text-gray-200'
+    }
+  }
 
   const handleTextSubmit = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && textInput.trim() && !state.isProcessing) {
+    if (e.key === 'Enter' && textInput.trim()) {
+      // Interrupt any ongoing processing or TTS before sending new message
+      if (state.isProcessing || isSpeaking) {
+        handleInterrupt()
+      }
+      
       const input = textInput.trim()
       setTextInput("")
       await sendMessage(input)
@@ -198,6 +194,18 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
   const handleInterrupt = () => {
     stop() // Stop TTS immediately
     interruptChat()
+    soundEffects.stopAll()
+  }
+
+  const handleWaveformClick = () => {
+    // Interrupt any ongoing processing or TTS before starting to listen
+    if (state.isProcessing || isSpeaking) {
+      handleInterrupt()
+    }
+    // Play listening sound effect
+    soundEffects.play('listening')
+    // Then toggle listening
+    handleMicClick()
   }
 
   // Show redirect screen in popup when onboarding is needed
@@ -322,29 +330,27 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-md">
-          <Waveform state={waveformState} onClick={handleMicClick} />
+          <Waveform state={waveformState} onClick={handleWaveformClick} />
         </div>
 
         {isListening && (
           <div className="mt-3 text-xs text-gray-500 font-mono">listening...</div>
         )}
 
-        {showProcessingIndicator && (
-          <div className="mt-3 text-xs text-gray-500 font-mono animate-pulse">
-            {state.executingTool ? `executing ${state.executingTool}...` : 'thinking...'}
-          </div>
-        )}
-
-        {transcript && !isSpeakingToolAction && (
-          <div className="mt-4 max-w-md text-sm text-gray-400 text-center">
-            {transcript}
-          </div>
-        )}
-
-        {displayText && (
+        {/* Transcript while listening */}
+        {transcript && isListening && (
           <div className="mt-4 max-w-md text-center">
-            <div className={`text-sm ${isSpeakingToolAction ? 'text-purple-400 font-medium' : 'text-gray-200'}`}>
-              {displayText}
+            <div className={`text-sm ${getTextColor(waveformState)}`}>
+              {transcript}
+            </div>
+          </div>
+        )}
+
+        {/* Spoken text - show current or last sentence */}
+        {!isListening && (currentSentence || lastDisplayedSentence) && (
+          <div className="mt-4 max-w-md text-center">
+            <div className={`text-sm ${getTextColor(waveformState)}`}>
+              {currentSentence || lastDisplayedSentence}
             </div>
           </div>
         )}
