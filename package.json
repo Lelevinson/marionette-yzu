@@ -2,7 +2,7 @@
   "name": "marionette",
   "displayName": "Marionette",
   "version": "0.0.1",
-  "description": "Marionette removes digital barriers by letting you navigate and control any website using natural language, entirely offline and private.",
+  "description": "Marionette lets you navigate and control any website using natural language, entirely offline and private.",
   "author": "Younes Laaroussi ceo@vidova.ai",
   "scripts": {
     "dev": "plasmo dev",
