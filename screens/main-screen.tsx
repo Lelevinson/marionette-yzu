@@ -15,6 +15,8 @@ import { RatingButtons } from "../components/rating-buttons"
 import { parseToolCall } from "../lib/tools"
 import { getSpokenLine } from "../lib/tool-registry"
 import { getCompleteSentences } from "../lib/sentence-parser"
+import { MAX_CONTEXT_SIZE } from "../lib/summarizer"
+import { embedFiles } from "../lib/file-embedder"
 
 interface MainScreenProps {
   onNavigateToDebug: () => void
@@ -35,6 +37,12 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
   
   // Track last displayed sentence to keep showing it when queue empties
   const [lastDisplayedSentence, setLastDisplayedSentence] = useState<string>('')
+  
+  // File embedder state
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false)
+  const [isEmbedding, setIsEmbedding] = useState(false)
+  const [embedSuccess, setEmbedSuccess] = useState<string | null>(null)
+  const dragCounterRef = useRef(0)
   
   // Get latest context count
   const latestContextCount = useMemo(() => {
@@ -148,6 +156,8 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
     ? 'listening'
     : isSpeaking
     ? 'speaking'  // If TTS is active, always show speaking state
+    : state.isSummarizing
+    ? 'summarizing'
     : state.isWarmingUp
     ? 'warming'
     : state.executingTool
@@ -164,6 +174,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       case 'warming': return 'text-orange-400'     // Orange 400
       case 'thinking': return 'text-blue-500'      // Blue 500
       case 'tool': return 'text-purple-500'        // Purple 500
+      case 'summarizing': return 'text-amber-400'  // Amber 400
       case 'idle': return 'text-gray-600'          // Gray 600
       default: return 'text-gray-200'
     }
@@ -179,6 +190,61 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       const input = textInput.trim()
       setTextInput("")
       await sendMessage(input)
+    }
+  }
+  
+  // Handle drag events for entire screen
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDraggingFiles(true)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDraggingFiles(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    setIsDraggingFiles(false)
+    dragCounterRef.current = 0
+    
+    if (isEmbedding) return
+    
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+    
+    setIsEmbedding(true)
+    
+    try {
+      const results = await embedFiles(files)
+      
+      const successCount = results.filter(r => r.success).length
+      if (successCount > 0) {
+        setEmbedSuccess(`Embedded ${successCount} file${successCount > 1 ? 's' : ''}`)
+        
+        // Auto-hide after 3 seconds
+        setTimeout(() => setEmbedSuccess(null), 3000)
+      }
+    } catch (error) {
+      console.error('Error embedding files:', error)
+    } finally {
+      setIsEmbedding(false)
     }
   }
 
@@ -198,6 +264,10 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
   }
 
   const handleWaveformClick = () => {
+    // Don't allow interaction while summarizing
+    if (state.isSummarizing) {
+      return
+    }
     // Interrupt any ongoing processing or TTS before starting to listen
     if (state.isProcessing || isSpeaking) {
       handleInterrupt()
@@ -220,8 +290,12 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       
       {/* Main app - hidden when onboarding is active */}
       <div 
-        className="w-full bg-black text-white flex flex-col" 
+        className="relative w-full bg-black text-white flex flex-col" 
         style={fullHeight ? { height: '100vh' } : { minHeight: '500px', maxHeight: '600px' }}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         {/* Header */}
       <div className="p-3 border-b border-gray-800 flex justify-between items-center">
@@ -231,7 +305,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
           {/* Context Indicator */}
           <div 
             className="relative group cursor-help"
-            title={`${latestContextCount}/9216 tokens`}
+            title={`${latestContextCount}/${MAX_CONTEXT_SIZE} tokens`}
           >
             <svg width="20" height="20" viewBox="0 0 20 20" className="transform -rotate-90">
               {/* Background circle */}
@@ -252,7 +326,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
                   fill="none"
                   stroke={latestContextCount > 7372 ? "rgb(239, 68, 68)" : latestContextCount > 4608 ? "rgb(251, 191, 36)" : "rgb(34, 197, 94)"}
                   strokeWidth="2"
-                  strokeDasharray={`${(latestContextCount / 9216) * 50.265} 50.265`}
+                  strokeDasharray={`${(latestContextCount / MAX_CONTEXT_SIZE) * 50.265} 50.265`}
                   strokeLinecap="round"
                   className="transition-all duration-300"
                 />
@@ -261,7 +335,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
             
             {/* Tooltip on hover */}
             <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-[10px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
-              {latestContextCount}/9216
+              {latestContextCount}/{MAX_CONTEXT_SIZE}
             </div>
           </div>
         </div>
@@ -296,12 +370,13 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
           </button>
           <button
             onClick={handleMicClick}
-            className={`p-1 hover:bg-gray-800 rounded ${isListening ? 'text-red-500' : ''}`}
+            disabled={state.isSummarizing}
+            className={`p-1 hover:bg-gray-800 rounded ${isListening ? 'text-red-500' : ''} disabled:opacity-50 disabled:cursor-not-allowed`}
             title={isListening ? 'Stop listening' : 'Start listening'}
           >
             <Mic className="w-4 h-4" />
           </button>
-          {state.isProcessing && (
+          {(state.isProcessing || state.isSummarizing) && (
             <button
               onClick={handleInterrupt}
               className="p-1 hover:bg-gray-800 rounded text-red-500"
@@ -330,7 +405,10 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-md">
-          <Waveform state={waveformState} onClick={handleWaveformClick} />
+          <Waveform 
+            state={waveformState} 
+            onClick={state.isSummarizing ? undefined : handleWaveformClick} 
+          />
         </div>
 
         {isListening && (
@@ -356,7 +434,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
         )}
         
         {/* Rating buttons - show only when response is complete */}
-        {!state.isProcessing && !state.isInToolLoop && latestResponse.text && latestResponse.id && (
+        {!state.isProcessing && !state.isInToolLoop && !state.isSummarizing && latestResponse.text && latestResponse.id && (
           <div className="mt-4 flex flex-col items-center justify-center gap-1">
             <div className="text-[10px] text-gray-500 font-mono">rate last response</div>
             <RatingButtons 
@@ -368,6 +446,35 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
           </div>
         )}
       </div>
+      
+      {/* Drag & Drop Overlay with Backdrop Blur */}
+      {(isDraggingFiles || isEmbedding || embedSuccess) && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/40 transition-all duration-300">
+          <div className="bg-gray-900/90 border-2 border-dashed border-gray-600 rounded-xl p-12 text-center">
+            {isEmbedding ? (
+              <>
+                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-xl text-gray-300">Embedding files...</p>
+              </>
+            ) : embedSuccess ? (
+              <>
+                <svg className="w-16 h-16 text-green-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <p className="text-xl text-gray-300">{embedSuccess}</p>
+              </>
+            ) : (
+              <>
+                <svg className="w-16 h-16 text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="text-xl text-gray-300">Drop files to embed</p>
+                <p className="text-sm text-gray-500 mt-2">PDF, TXT, MD, HTML, JSON</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Bottom bar */}
       <div className="p-3 border-t border-gray-800">
@@ -384,7 +491,7 @@ export const MainScreen = ({ onNavigateToDebug, fullHeight = false }: MainScreen
           value={textInput}
           onChange={(e) => setTextInput(e.target.value)}
           onKeyDown={handleTextSubmit}
-          disabled={state.isProcessing}
+          disabled={state.isProcessing || state.isSummarizing}
           placeholder="type here..."
           className="w-full bg-transparent border-none text-sm font-mono text-gray-300 placeholder-gray-600 focus:outline-none disabled:opacity-50 text-center"
         />

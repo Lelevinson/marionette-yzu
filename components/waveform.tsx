@@ -3,16 +3,16 @@ import { gsap } from 'gsap'
 import { cn } from '../lib/utils'
 
 interface WaveformProps {
-  state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool' | 'warming'
+  state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool' | 'warming' | 'summarizing'
   className?: string
   onClick?: () => void
 }
 
-const getWaveConfig = (state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool' | 'warming') => ({
+const getWaveConfig = (state: 'idle' | 'listening' | 'thinking' | 'speaking' | 'tool' | 'warming' | 'summarizing') => ({
   barCount: 80,
   barWidth: 4,
   barSpacing: 2,
-  maxHeight: state === 'listening' ? 120 : state === 'speaking' ? 100 : state === 'warming' ? 80 : state === 'thinking' ? 70 : state === 'tool' ? 90 : 40,
+  maxHeight: state === 'listening' ? 120 : state === 'speaking' ? 100 : state === 'warming' ? 80 : state === 'thinking' ? 70 : state === 'tool' ? 90 : state === 'summarizing' ? 85 : 40,
   baseHeight: 4,
   colorStops: state === 'listening'
     ? [
@@ -48,6 +48,13 @@ const getWaveConfig = (state: 'idle' | 'listening' | 'thinking' | 'speaking' | '
         { stop: 0.3, color: [147, 51, 234] }, // Purple 600
         { stop: 0.6, color: [126, 34, 206] }, // Purple 700
         { stop: 1, color: [107, 33, 168] }    // Purple 800
+      ]
+    : state === 'summarizing'
+    ? [
+        { stop: 0, color: [251, 191, 36] },   // Amber 400
+        { stop: 0.3, color: [245, 158, 11] }, // Amber 500
+        { stop: 0.6, color: [217, 119, 6] },  // Amber 600
+        { stop: 1, color: [180, 83, 9] }      // Amber 700
       ]
     : [
         { stop: 0, color: [75, 85, 99] },     // Gray 600
@@ -130,6 +137,11 @@ export function Waveform({ state, className, onClick }: WaveformProps) {
         const time = Date.now() * 0.006
         const wave = Math.sin(time + i * 0.5) * 0.7 + 0.3
         targetBarHeight = baseHeight + wave * maxHeight
+      } else if (state === 'summarizing') {
+        const time = Date.now() * 0.0025
+        const wave1 = Math.sin(time + i * 0.15) * 0.5 + 0.5
+        const wave2 = Math.sin(time * 1.3 + i * 0.1) * 0.3 + 0.7
+        targetBarHeight = baseHeight + wave1 * wave2 * maxHeight
       } else {
         const time = Date.now() * 0.001
         const wave = Math.sin(time + i * 0.2) * 0.3 + 0.7
@@ -198,6 +210,11 @@ export function Waveform({ state, className, onClick }: WaveformProps) {
         const time = Date.now() * 0.006
         const wave = Math.sin(time) * 0.7 + 0.3
         targetCenterBarHeight = baseHeight + wave * maxHeight
+      } else if (state === 'summarizing') {
+        const time = Date.now() * 0.0025
+        const wave1 = Math.sin(time) * 0.5 + 0.5
+        const wave2 = Math.sin(time * 1.3) * 0.3 + 0.7
+        targetCenterBarHeight = baseHeight + wave1 * wave2 * maxHeight
       } else {
         const time = Date.now() * 0.001
         const wave = Math.sin(time) * 0.3 + 0.7

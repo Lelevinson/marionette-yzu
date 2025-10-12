@@ -18,4 +18,6 @@ export const CORE_TOOLS = [
   "detectLanguage",
   "searchVault",
   "getPlaybook",  
+  "summarizePage",
+  "highlightText",
 ]

@@ -16,6 +16,12 @@ export interface VaultEntry {
   timestamp: number
   domain: string
   wordCount: number
+  metadata?: {
+    fileName?: string
+    fileType?: string
+    fileSize?: number
+    lastModified?: number
+  }
 }
 
 export interface ContentChunk {
@@ -295,6 +301,69 @@ export async function getVaultStats(): Promise<{
     }
   } catch (error) {
     console.error('[Vault] Error getting stats:', error)
+    throw error
+  }
+}
+
+// Get all vault entries
+export async function getAllVaultEntries(): Promise<VaultEntry[]> {
+  try {
+    const db = await getDB()
+    const transaction = db.transaction(STORE_NAME, 'readonly')
+    const store = transaction.objectStore(STORE_NAME)
+    
+    const entries = await new Promise<VaultEntry[]>((resolve, reject) => {
+      const request = store.getAll()
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    
+    // Sort by timestamp (newest first)
+    return entries.sort((a, b) => b.timestamp - a.timestamp)
+  } catch (error) {
+    console.error('[Vault] Error getting all entries:', error)
+    throw error
+  }
+}
+
+// Delete a single vault entry and its chunks
+export async function deleteVaultEntry(id: string): Promise<void> {
+  try {
+    console.log('[Vault] Deleting entry:', id)
+    
+    const db = await getDB()
+    const transaction = db.transaction([STORE_NAME, CHUNKS_STORE_NAME], 'readwrite')
+    const pageStore = transaction.objectStore(STORE_NAME)
+    const chunkStore = transaction.objectStore(CHUNKS_STORE_NAME)
+    
+    // Delete page
+    await new Promise<void>((resolve, reject) => {
+      const request = pageStore.delete(id)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+    
+    // Delete associated chunks
+    const chunkIndex = chunkStore.index('pageId')
+    const chunks = await new Promise<ContentChunk[]>((resolve, reject) => {
+      const request = chunkIndex.getAll(id)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    
+    await Promise.all(
+      chunks.map(chunk =>
+        new Promise<void>((resolve, reject) => {
+          const request = chunkStore.delete(chunk.id)
+          request.onsuccess = () => resolve()
+          request.onerror = () => reject(request.error)
+        })
+      )
+    )
+    
+    console.log('[Vault] Deleted entry and', chunks.length, 'chunks')
+  } catch (error) {
+    console.error('[Vault] Error deleting entry:', error)
     throw error
   }
 }

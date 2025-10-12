@@ -9,7 +9,7 @@ import {
 // Re-export for convenience
 export { formatSummaryMessage }
 
-const MAX_CONTEXT_SIZE = 9216
+export const MAX_CONTEXT_SIZE = 9216
 const SUMMARIZATION_THRESHOLD = 0.8 // 80%
 
 export function shouldSummarize(currentTokens: number): boolean {

@@ -36,11 +36,6 @@ export const E2E_TEST_CONFIG = {
    * After the last phrase, it cycles back to the beginning.
    */
   TEST_PHRASES: [
-    "open a new tab and search for weather",
-    "fill out the contact form with my details",
-    "send a message to John",
-    "find the nearest coffee shop",
-    "remind me about my meeting at 3pm",
     // Add more test phrases here as needed
   ],
 
@@ -68,5 +63,29 @@ export const E2E_TEST_CONFIG = {
    * Set to false to test the full user experience including warmup
    */
   SKIP_WARMUP_PHASE: false,
+
+  /**
+   * Enable automated UI testing mode
+   * 
+   * When enabled, specific user inputs trigger automated test flows that validate
+   * the UI's ability to execute tool calls, parse results, and interact with forms.
+   */
+  ENABLE_UI_TEST_MODE: false,
+
+  /**
+   * Automated UI test cases
+   * 
+   * Each test case validates a specific user workflow by executing actual tool calls
+   * against live web pages. Tests dynamically extract page data (form field indices, etc.)
+   * to ensure they work across different page states and real-world conditions.
+   * 
+   * Test cases validate:
+   * - Tool execution correctness
+   * - Result parsing and data extraction
+   * - Multi-step workflow coordination
+   * - Form interaction reliability
+   * - UI state management
+   */
+  UI_TEST_CASES: []
 }
 

@@ -10,6 +10,8 @@ import { type AlertAction, openAIFlagsPage, openWriterAPIFlagsPage } from './ale
 import { useTTS } from './tts-context'
 import { storeRating } from './rating-database'
 import { useSoundEffects } from './use-sound-effects'
+import { getMemoryReminder } from './prompts/system-prompt'
+import { checkForTestTrigger, getNextTestChunk, getTestStepDelay } from './ui-test-runner'
 
 // Validate UI tools on module load
 validateUITools()
@@ -278,6 +280,17 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_SUMMARIZING', payload: true })
       
       try {
+        // Wait for any ongoing TTS to finish before announcing
+        await waitForTTS()
+        
+        // Speak "Summarizing context..." message and play sound
+        speakText('Summarizing context...', true)
+        soundEffects.play('summarizing')
+        
+        // Wait for TTS queue to clear before starting summarization
+        console.log('[SUMMARIZER] Waiting for TTS to finish speaking summarization message...')
+        await waitForTTS()
+        
         // Summarize current conversation (only non-visual messages)
         const messagesForSummary = state.messages.filter(msg => !msg.visualOnly)
         const summary = await summarizeConversation(messagesForSummary)
@@ -364,30 +377,50 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     const userMessage = createUserMessage(userInput)
     dispatch({ type: 'ADD_MESSAGE', payload: userMessage })
     
-    // Stream AI response
+    // Check if this triggers a UI test case
+    const isTestMode = checkForTestTrigger(userInput)
+    
+    // Stream AI response (or test response)
     let assistantContent = ""
     let assistantMessageId = Date.now() + '_assistant'
     
     try {
       console.log('[PROCESSING] Starting initial stream...')
-      const contextCount = await streamWithWarmup(
-        messageToSend, 
-        (chunk: string) => {
-          assistantContent += chunk
-          
-          if (assistantContent.length === chunk.length) {
-            // First chunk - add message
-            console.log('[PROCESSING] First chunk received')
-            dispatch({ type: 'SET_WAITING', payload: false })
-            const assistantMessage = createAssistantMessage(assistantContent)
-            assistantMessageId = assistantMessage.id
-            dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage })
-          } else {
-            // Update existing message
-            dispatch({ type: 'UPDATE_MESSAGE', payload: { id: assistantMessageId, content: assistantContent } })
-          }
+      
+      let contextCount = 0
+      
+      if (isTestMode) {
+        // Test mode: Get first chunk from test runner
+        console.log('[UI Test] Getting first test chunk')
+        const testChunk = getNextTestChunk()
+        if (testChunk) {
+          assistantContent = testChunk
+          dispatch({ type: 'SET_WAITING', payload: false })
+          const assistantMessage = createAssistantMessage(assistantContent)
+          assistantMessageId = assistantMessage.id
+          dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage })
         }
-      )
+      } else {
+        // Normal mode: Stream from LLM
+        contextCount = await streamWithWarmup(
+          messageToSend, 
+          (chunk: string) => {
+            assistantContent += chunk
+            
+            if (assistantContent.length === chunk.length) {
+              // First chunk - add message
+              console.log('[PROCESSING] First chunk received')
+              dispatch({ type: 'SET_WAITING', payload: false })
+              const assistantMessage = createAssistantMessage(assistantContent)
+              assistantMessageId = assistantMessage.id
+              dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage })
+            } else {
+              // Update existing message
+              dispatch({ type: 'UPDATE_MESSAGE', payload: { id: assistantMessageId, content: assistantContent } })
+            }
+          }
+        )
+      }
       
       console.log('[PROCESSING] Initial stream complete, content length:', assistantContent.length)
       
@@ -640,23 +673,50 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         console.log(`[PROCESSING] Starting loopback ${loopCount + 1} - still processing...`)
         let followupContent = ""
         const followupMessageId = Date.now() + '_followup_' + loopCount
+        let followupContextCount = 0
         
         console.log(`[STOPBTN] ========== LOOPBACK ${loopCount + 1} START ==========`)
         console.log(`[STOPBTN] isProcessing=true, isInToolLoop=true (STOP button should be visible)`)
-        console.log(`[STOPBTN] About to call streamResponse...`)
-        // IMPORTANT: Use a continuation prompt so the agent knows to keep executing
-        const continuationPrompt = 'Continue executing the workflow based on the last tool result. Do not conclude. If the playbook has more steps, perform the next step.'
-        const followupContextCount = await streamWithWarmup(continuationPrompt, (chunk: string) => {
-          followupContent += chunk
-          
-          if (followupContent.length === chunk.length) {
-            console.log(`[STOPBTN] Loopback ${loopCount + 1} FIRST CHUNK received`)
+        
+        if (isTestMode) {
+          console.log('[UI Test] Getting next test chunk after tool execution')
+          const delay = getTestStepDelay()
+          await new Promise(resolve => setTimeout(resolve, delay))
+          const testChunk = getNextTestChunk(toolResult)
+          if (testChunk) {
+            followupContent = testChunk
             const followupMessage = createAssistantMessage(followupContent, 0)
             dispatch({ type: 'ADD_MESSAGE', payload: { ...followupMessage, id: followupMessageId } })
+            
+            // If this is a respond (not a tool call), speak it
+            if (!testChunk.includes('<function_call>')) {
+              await waitForTTS()
+              speakText(testChunk, false)
+            }
           } else {
-            dispatch({ type: 'UPDATE_MESSAGE', payload: { id: followupMessageId, content: followupContent } })
+            // Test is complete
+            console.log('[UI Test] Test sequence complete')
+            break
           }
-        }, resultToPass)
+        } else {
+          // Normal mode: Stream from LLM
+          console.log(`[STOPBTN] About to call streamResponse...`)
+          // IMPORTANT: Use a continuation prompt so the agent knows to keep executing
+          // Inject memory reminder to keep user info fresh in context
+          const memoryReminder = await getMemoryReminder()
+          const continuationPrompt = `${memoryReminder}Continue executing the workflow based on the last tool result. Do not conclude. If the playbook has more steps, perform the next step.`
+          followupContextCount = await streamWithWarmup(continuationPrompt, (chunk: string) => {
+            followupContent += chunk
+            
+            if (followupContent.length === chunk.length) {
+              console.log(`[STOPBTN] Loopback ${loopCount + 1} FIRST CHUNK received`)
+              const followupMessage = createAssistantMessage(followupContent, 0)
+              dispatch({ type: 'ADD_MESSAGE', payload: { ...followupMessage, id: followupMessageId } })
+            } else {
+              dispatch({ type: 'UPDATE_MESSAGE', payload: { id: followupMessageId, content: followupContent } })
+            }
+          }, resultToPass)
+        }
         
         console.log(`[STOPBTN] ========== LOOPBACK ${loopCount + 1} STREAM COMPLETE ==========`)
         console.log(`[STOPBTN] Stream finished, content length:`, followupContent.length)
@@ -674,7 +734,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           let continueContent = ""
           const continueMessageId = Date.now() + '_continue_' + loopCount
           
-          const continuePrompt = "Please continue with your workflow based on the context summary above."
+          const memoryReminderAfterSummary = await getMemoryReminder()
+          const continuePrompt = `${memoryReminderAfterSummary}Please continue with your workflow based on the context summary above.`
           const continueContextCount = await streamWithWarmup(continuePrompt, (chunk: string) => {
             continueContent += chunk
             
@@ -702,6 +763,10 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       }
       
       console.log('[STOPBTN] ========== EXITING TOOL LOOP after', loopCount, 'iterations ==========')
+      
+      // Wait for TTS to finish speaking before completing
+      console.log('[TTS] Waiting for final TTS to complete...')
+      await waitForTTS()
       
       // Clear the tool loop flag - workflow is complete
       dispatch({ type: 'SET_IN_TOOL_LOOP', payload: false })
@@ -768,6 +833,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_PROCESSING', payload: false })
     dispatch({ type: 'SET_WAITING', payload: false })
     dispatch({ type: 'SET_IN_TOOL_LOOP', payload: false })
+    dispatch({ type: 'SET_SUMMARIZING', payload: false })
   }
 
   const copyContext = async (): Promise<string> => {

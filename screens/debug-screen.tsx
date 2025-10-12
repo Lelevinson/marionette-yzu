@@ -7,7 +7,8 @@ import { useChatContext } from "../lib/chat-context"
 import { useTTS } from "../lib/tts-context"
 import { getToolNames, TOOL_REGISTRY, getToolSpec } from "../lib/tool-registry"
 import { testEmbeddings, testSimilarity } from "../lib/transformers-test"
-import { searchVault, getVaultStats, clearVault } from "../lib/vault"
+import { searchVault, getVaultStats, clearVault, getAllVaultEntries, deleteVaultEntry } from "../lib/vault"
+import { EmbeddedFilesList } from "../components/embedded-files-list"
 import { useWakeWordBuiltIn } from "../lib/use-wake-word-builtin"
 import { RatingButtons } from "../components/rating-buttons"
 import { useOnboarding } from "../components/onboarding/onboarding-provider"
@@ -635,6 +636,60 @@ const RatingStatsDebugger = () => {
   )
 }
 
+const EmbeddedFilesDebugger = () => {
+  const [vaultEntries, setVaultEntries] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const loadFiles = async () => {
+    setIsLoading(true)
+    try {
+      const entries = await getAllVaultEntries()
+      setVaultEntries(entries)
+    } catch (error: any) {
+      console.error('Error loading files:', error)
+    }
+    setIsLoading(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    setIsLoading(true)
+    try {
+      await deleteVaultEntry(id)
+      await loadFiles()
+    } catch (error: any) {
+      alert(`Error deleting file: ${error.message}`)
+    }
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    loadFiles()
+  }, [])
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-mono text-gray-400">
+          Total: {vaultEntries.length} entries
+        </div>
+        <button
+          onClick={loadFiles}
+          disabled={isLoading}
+          className="px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded text-[10px] font-mono"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <EmbeddedFilesList 
+        entries={vaultEntries}
+        onDelete={handleDelete}
+        onRefresh={loadFiles}
+      />
+    </>
+  )
+}
+
 const VaultDebugger = () => {
   const [stats, setStats] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -1074,6 +1129,11 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
         {/* Vault Debugger */}
         <CollapsibleSection title="VAULT DEBUGGER">
           <VaultDebugger />
+        </CollapsibleSection>
+
+        {/* Embedded Files */}
+        <CollapsibleSection title="EMBEDDED FILES">
+          <EmbeddedFilesDebugger />
         </CollapsibleSection>
 
         {/* Rating Stats */}

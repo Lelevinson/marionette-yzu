@@ -11,6 +11,7 @@ export type SoundEffect =
   | 'speaking'
   | 'screenshot'
   | 'audioCapture'
+  | 'summarizing'
 
 interface SoundConfig {
   src: string
@@ -28,7 +29,8 @@ const SOUND_MAP: Record<SoundEffect, SoundConfig> = {
   listening: { src: chrome.runtime.getURL('assets/when-604.ogg'), volume: 0.3 },
   speaking: { src: chrome.runtime.getURL('assets/closure-542.ogg'), volume: 0.15 },
   screenshot: { src: chrome.runtime.getURL('assets/camera-shutter-close.wav'), volume: 0.4 },
-  audioCapture: { src: chrome.runtime.getURL('assets/cd-sound.wav'), volume: 0.4 }
+  audioCapture: { src: chrome.runtime.getURL('assets/cd-sound.wav'), volume: 0.4 },
+  summarizing: { src: chrome.runtime.getURL('assets/cd-sound.wav'), volume: 0.25 }
 }
 
 export const useSoundEffects = () => {

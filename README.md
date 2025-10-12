@@ -1,8 +1,8 @@
-# Marionette
+# Marionette Whitepaper
 
 <div align="center">
 
-<img src="./MarionetteDemo.gif" alt="Marionette Demo" height="400" />
+<img src="./media/MarionetteDemo.gif" alt="Marionette Demo" height="400" />
 
 **AI browser automation agent powered by Chrome's built-in Gemini Nano**
 
@@ -35,6 +35,7 @@
   - [Playbook System](#aligning-the-model-with-playbooks)
   - [Embeddings Architecture](#embeddings-why-they-massively-boost-gemini-nano)
   - [Chunk-Based Retrieval](#auto-capture-vault-system-with-chunk-based-retrieval)
+  - [File Embedding](#file-embedding-drag-and-drop-document-ingestion)
   - [Agent Alignment (Parsing, Loops, Summarization)](#tool-call-format-and-parsing)
   - [Tool Routing & Extensibility](#tool-routing-architecture)
   - [Rating System](#response-rating-and-future-alignment)
@@ -56,6 +57,7 @@ Marionette removes digital barriers by letting you navigate and control any webs
 - Agentic loopback system (up to 60 tool iterations per task)
 - Multimodal input (text, voice, image, audio)
 - Semantic memory vault with chunk-based RAG retrieval
+- Drag-and-drop file embedding (PDF, TXT, MD, HTML, JSON)
 - 384D embeddings via Transformers.js (all-MiniLM-L6-v2)
 - Playbook-guided workflows for complex tasks
 - 100% offline, zero telemetry
@@ -142,6 +144,22 @@ Gemini Nano is small and private, but that means limited reasoning power—it ne
 The system prompt stays minimal by design. We expose a small core toolset—enough to perceive the page (captureScreenshot), navigate (openTab, switchTab), discover elements (findElements), and perform basic actions (clickElement, fillInput, listen). When complexity increases, the model can request domain-specific context by calling getPlaybook("task"), which provides relevant knowledge and unlocks specialized tools for that domain.
 
 The agentic loop is straightforward: after each tool execution, we return the result with [TOOL RESULT] and let the model decide the next step. This continues until the task completes or the model determines it's done—no hardcoded branching, just repeated observation and action.
+
+### Speak Human: Why Natural Language Beats Technical Jargon
+
+Early in development, we discovered something counterintuitive: Gemini Nano performs significantly better when you hide technical terminology and use natural, everyday language instead.
+
+When we exposed concepts like "accessibility tree" or "DOM snapshot," the model would get distracted—reasoning about accessibility compliance, debating tree traversal strategies, or overthinking implementation details. It would fixate on the technical terminology rather than just using the information.
+
+The fix was simple: strip out the jargon. Instead of "accessibility tree," we say "page elements." Instead of "execute tool," we say "do this action." We present data in plain, action-oriented language that focuses on what the agent needs to do, not how the underlying system works.
+
+This pattern holds across the entire system:
+- Tool names avoid technical terms (clickElement, not invokeClickHandler)
+- Error messages explain what went wrong in plain English
+- System prompts describe capabilities naturally ("you can see" not "vision API available")
+- Instructions focus on the task, not the mechanism
+
+Small models have limited reasoning capacity. Technical jargon wastes that capacity on irrelevant abstraction. Natural language keeps the model focused on the actual task.
 
 ### The Agent Is the Prompt API
 
@@ -257,6 +275,10 @@ This isn't just an optimization; it's what makes complex agentic workflows possi
 4. **Faster responses**: Less text to process means quicker inference times
 5. **Reduced hallucination**: The model sees actual relevant text, not a summary or approximation
 
+<div align="center">
+<img src="./diagrams/embeddings_architecture.png" alt="Embeddings Architecture" height="400" />
+</div>
+
 ### Conversation Summarization
 
 When the chat history approaches 80% of the context window (~7,300 tokens), we trigger Chrome's Summarizer API with a tuned prompt that preserves tool usage patterns, user preferences, and task state. The summarized history replaces the old messages, giving the model enough information to continue without losing critical context.
@@ -321,6 +343,10 @@ The structured data extraction solves a critical problem: email addresses and ph
 
 The overlap ensures that content spanning chunk boundaries isn't lost. A 5,000-word article becomes ~10 chunks, each with its own semantic vector. Storage happens silently in the background—you don't notice it.
 
+<div align="center">
+<img src="./diagrams/semantic_vault.png" alt="Semantic Vault" height="400" />
+</div>
+
 **How Retrieval Works:**
 
 When the agent needs information—"What did I read about React hooks?"—it calls `searchVault("React hooks")`:
@@ -377,6 +403,10 @@ The structured data extraction ensures that email addresses, phone numbers, and 
 
 If a page discusses React hooks in paragraph 47 of a long article, traditional search might return the page with an irrelevant excerpt from paragraph 1. Chunk-based retrieval finds paragraph 47 specifically because it has the highest semantic similarity to your query.
 
+<div align="center">
+<img src="./diagrams/chunk_retrieval.png" alt="Chunk-Based Retrieval" height="400" />
+</div>
+
 **Storage Architecture:**
 
 ```
@@ -401,17 +431,57 @@ IndexedDB: marionette_vault (v2)
 
 The vault grows indefinitely (IndexedDB has no practical storage limit in extensions), though cleanup logic exists to cap storage at 100 pages if needed. The assumption is: more history is better, and chunk-level search makes it all accessible.
 
-<div align="center">
-<img src="./diagrams/semantic_vault.png" alt="Semantic Vault" height="400" />
-</div>
+### File Embedding: Drag-and-Drop Document Ingestion
+
+![Demo of File Upload](./media/UploadFile.gif)
+
+Local documents—resumes, research papers, meeting notes—need to be searchable alongside captured webpages. File embedding extends the vault system to handle local files through the same semantic search pipeline.
+
+**Supported File Types:**
+
+| Format | Parser | What It Extracts |
+|--------|--------|------------------|
+| PDF | pdfjs-dist | Text + metadata (title, author, page count) |
+| TXT | Native | Plain text content |
+| MD | Native | Markdown with formatting preserved |
+| HTML | DOMParser | Main content text |
+| JSON | Native | Structured data as text |
+
+**Processing Pipeline:**
 
 <div align="center">
-<img src="./diagrams/chunk_retrieval.png" alt="Chunk-Based Retrieval" height="400" />
+<img src="./diagrams/file_embedding.png" alt="File Embedding System" height="400" />
 </div>
 
-<div align="center">
-<img src="./diagrams/embeddings_architecture.png" alt="Embeddings Architecture" height="400" />
-</div>
+
+Files enter the same embedding flow as webpages: text extraction → chunking → embedding generation → IndexedDB storage. The only difference is the extraction method—PDFs use pdfjs-dist, text files read directly, HTML parses the DOM.
+
+**PDF Extraction:**
+
+PDF text extraction uses `pdfjs-dist` running in-browser via WebAssembly. The worker file is bundled with the extension and loaded via `chrome.runtime.getURL()`, ensuring offline operation without CDN dependencies.
+
+```typescript
+pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('assets/pdf.worker.min.mjs')
+
+const pdf = await pdfjsLib.getDocument({
+  data: arrayBuffer,
+  useWorkerFetch: false,  // CSP restrictions
+  isEvalSupported: false,  // Extension security
+  useSystemFonts: true
+})
+```
+
+Text extraction is page-by-page with spatial awareness—spaces between distant words, newlines between different y-coordinates. This preserves document structure.
+
+**Storage:**
+
+Each file becomes a vault entry:
+- `domain: 'local-files'` (distinguishes from webpage captures)
+- `url: 'file://filename.pdf'` (unique identifier)
+- `metadata`: fileName, fileType, fileSize, lastModified
+- Full content + chunks with embeddings (same as pages)
+
+Once stored, the agent can search via `searchVault("work experience")` and retrieve relevant sections from embedded resumes, notes, or documentation. The vault doesn't distinguish between webpages and files—both are just searchable text with embeddings.
 
 ### Privacy and Security: 100% Offline After Initial Setup
 
@@ -815,41 +885,6 @@ pnpm build
 - Multi-agent collaboration (coordinating multiple Nano instances)
 - Advanced memory (vector clustering, topic modeling)
 - Tool composition (combining simple tools into complex ones)
-
----
-
-## E2E Testing
-
-Marionette includes a test mode for end-to-end testing of voice-driven workflows using predefined inputs.
-
-### Configuration
-
-Edit `lib/e2e-config.ts`:
-
-```typescript
-export const E2E_TEST_CONFIG = {
-  TEST_MODE_ENABLED: true,  // Set to false for production
-  TEST_PHRASES: [
-    "find the model architecture section",
-    "summarize this page",
-    // Add test phrases for your workflow
-  ],
-  INITIAL_DELAY: 2000,      // Delay before phrase starts (ms)
-  WORD_DELAY: 300,          // Delay between words (ms)
-  AUTO_END_DELAY: 1000,     // Delay before auto-ending (ms)
-}
-```
-
-### Usage
-
-1. Enable test mode in `lib/e2e-config.ts` by setting `TEST_MODE_ENABLED: true`
-2. Add test phrases to the `TEST_PHRASES` array
-3. Load the extension and click the microphone button
-4. Each click uses the next phrase sequentially (cycles after the last phrase)
-5. Phrases stream word-by-word, matching live speech recognition behavior
-6. The agent processes the input and executes the workflow
-
-This enables reliable testing of agent workflows, tool usage patterns, and response quality with controlled inputs.
 
 ---
 

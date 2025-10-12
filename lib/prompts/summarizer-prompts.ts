@@ -6,7 +6,7 @@ export const SUMMARIZER_CONTEXT_PROMPT =
   'Create a concise summary focusing on: ' +
   '1) What task the user originally requested (e.g., "fill this form"), ' +
   '2) What specific actions the AI has already completed with exact details: ' +
-  '   - List EACH form field that was filled with its index number and value (e.g., "Filled [12] First Name: Younes", "Filled [13] Last Name: laaroussi") ' +
+  '   - List EACH form field that was filled with its index number and value (e.g., "Filled [12] First Name: John", "Filled [13] Last Name: Smith") ' +
   '   - Include which buttons were clicked, which pages were opened, etc. ' +
   '3) What data the user has provided that hasn\'t been filled yet (list the exact values for each remaining field), ' +
   '4) What fields remain to be filled (list field names with their index numbers from the accessibility snapshot), ' +

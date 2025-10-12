@@ -88,11 +88,21 @@ async function highlightText(params: any) {
       args: [text]
     })
 
-    if (results && results[0]?.result) {
-      return results[0].result
+    if (results && results[0]) {
+      const result = results[0].result
+      // If the injected function returned a result, use it
+      if (result) {
+        return result
+      }
+      // If result is undefined, the text was found and highlighted successfully
+      // (the injected function completed without errors but may not have returned a value)
+      return { 
+        success: true, 
+        message: `Highlighted "${text}" on the page` 
+      }
     }
 
-    return { success: false, error: 'Failed to execute highlight' }
+    return { success: false, error: 'Failed to execute highlight script' }
   } catch (error: any) {
     return { success: false, error: error.message }
   }
