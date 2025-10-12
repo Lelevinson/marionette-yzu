@@ -110,7 +110,7 @@ pnpm build
 # 4. Select the build/chrome-mv3-dev directory
 ```
 
-**Option 2: Chrome Web Store** *(coming soon)*
+**Option 2: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/lleffmjgcoebjmdnphcfmmeafljckife)**
 
 ### First Run
 
