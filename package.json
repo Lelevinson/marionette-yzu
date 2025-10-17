@@ -1,7 +1,7 @@
 {
   "name": "marionette",
   "displayName": "Marionette",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Marionette lets you navigate and control any website using natural language, entirely offline and private.",
   "author": "Younes Laaroussi ceo@vidova.ai",
   "scripts": {
@@ -71,7 +71,6 @@
       "scripting",
       "storage",
       "unlimitedStorage",
-      "alarms",
       "audioCapture",
       "sidePanel",
       "webNavigation"
