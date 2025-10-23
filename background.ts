@@ -96,6 +96,99 @@ chrome.webNavigation.onCompleted.addListener((details) => {
 
 // Handle tool execution messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Handle screenshot capture requests (for explainer)
+  if (message.type === 'capture_screenshot') {
+    (async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (!tab?.id || !tab.windowId) {
+          sendResponse({ success: false, error: 'No active tab found' })
+          return
+        }
+
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' })
+        sendResponse({ success: true, dataUrl })
+      } catch (error: any) {
+        sendResponse({ success: false, error: error.message })
+      }
+    })()
+    return true // Indicates async response
+  }
+  
+  // Handle audio capture requests (for explainer)
+  if (message.type === 'capture_audio') {
+    (async () => {
+      try {
+        const { duration = 5 } = message
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (!tab?.id) {
+          sendResponse({ success: false, error: 'No active tab found' })
+          return
+        }
+
+        if (tab.url?.startsWith('chrome://') || tab.url?.startsWith('chrome-extension://')) {
+          sendResponse({ success: false, error: 'Cannot capture audio from this page' })
+          return
+        }
+
+        // Get stream ID
+        const streamId = await new Promise<string>((resolve, reject) => {
+          chrome.tabCapture.getMediaStreamId({ consumerTabId: tab.id }, (streamId) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message))
+            } else if (streamId) {
+              resolve(streamId)
+            } else {
+              reject(new Error('Failed to get media stream ID'))
+            }
+          })
+        })
+
+        // Send to content script to capture
+        const audioResult = await new Promise<{ result?: string; error?: string }>((resolve) => {
+          chrome.tabs.sendMessage(tab.id!, {
+            type: 'capture_tab_audio',
+            streamId: streamId,
+            duration: duration
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              resolve({ error: chrome.runtime.lastError.message })
+            } else {
+              resolve(response || { error: 'No response from content script' })
+            }
+          })
+        })
+
+        if (audioResult.error) {
+          sendResponse({ success: false, error: audioResult.error })
+        } else {
+          sendResponse({ success: true, audioDataUrl: audioResult.result })
+        }
+      } catch (error: any) {
+        sendResponse({ success: false, error: error.message })
+      }
+    })()
+    return true // Indicates async response
+  }
+  
+  if (message.type === 'open_popup') {
+    // Check if sidepanel is already open
+    chrome.runtime.sendMessage({ type: 'ping_sidepanel' }).then(() => {
+      // Sidepanel responded, it's open - don't open popup
+      console.log('[Background] Sidepanel is open, not opening popup')
+      sendResponse({ success: true, sidepanelOpen: true })
+    }).catch(() => {
+      // Sidepanel not open, open popup instead
+      console.log('[Background] Sidepanel not open, opening popup')
+      chrome.action.openPopup().catch(err => {
+        console.log('[Background] Could not open popup:', err)
+        sendResponse({ success: false, error: err.message })
+      })
+      sendResponse({ success: true, sidepanelOpen: false })
+    })
+    return true
+  }
+  
   if (message.type === 'run_tool') {
     const { toolName, parameters, context } = message.payload
     

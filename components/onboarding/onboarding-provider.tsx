@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 
-export type OnboardingStep = 'welcome' | 'purpose' | 'microphone' | 'model' | 'complete' | null
+export type OnboardingStep = 'welcome' | 'purpose' | 'microphone' | 'model' | 'features' | 'complete' | null
 
 interface OnboardingState {
   currentStep: OnboardingStep
@@ -26,7 +26,7 @@ const OnboardingContext = createContext<OnboardingContextValue | null>(null)
 
 const STORAGE_KEY = 'marionette_onboarding_complete'
 
-const steps: OnboardingStep[] = ['welcome', 'purpose', 'microphone', 'model', 'complete']
+const steps: OnboardingStep[] = ['welcome', 'purpose', 'microphone', 'model', 'features', 'complete']
 
 interface OnboardingProviderProps {
   children: ReactNode

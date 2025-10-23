@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react"
-import { Copy, RotateCcw, Square, ArrowLeft, Play, ChevronDown, ChevronRight } from "lucide-react"
+import { Copy, RotateCcw, Square, ArrowLeft, Play, ChevronDown, ChevronRight, Paperclip, X } from "lucide-react"
 import { parseToolCall, executeTool } from "../lib/tools"
 import { executeUITool } from "../lib/ui-tools"
 import { type Message } from "../lib/messages"
@@ -883,7 +883,7 @@ const VaultDebugger = () => {
 }
 
 export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScreenProps) => {
-  const { state, sendMessage, resetChat, interruptChat, copyContext, rateMessage } = useChatContext()
+  const { state, sendMessage, resetChat, interruptChat, copyContext, rateMessage, dispatch } = useChatContext()
   const { stop, isSpeaking } = useTTS()
   const [input, setInput] = useState("")
   const [copyFeedback, setCopyFeedback] = useState("")
@@ -1192,6 +1192,84 @@ export const DebugScreen = ({ onNavigateToMain, fullHeight = false }: DebugScree
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="p-3 border-t border-gray-800">
+        {/* Reference indicator */}
+        {state.reference && (
+          <div 
+            className="mb-2 flex flex-col gap-2 px-3 py-2 bg-blue-900/20 border border-blue-700/30 rounded text-xs font-mono"
+            style={{
+              animation: 'slideInScale 0.3s ease-out',
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <Paperclip size={14} className="text-blue-400" style={{ animation: 'spin 0.5s ease-out' }} />
+              <span className="text-gray-400 flex-1 truncate">
+                {state.reference.image ? 'Screenshot' : state.reference.audio ? 'Audio Recording' : `"${state.reference.text.substring(0, 50)}${state.reference.text.length > 50 ? '...' : ''}"`}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  dispatch({ type: 'SET_REFERENCE', payload: null })
+                  chrome.storage.local.remove('chat_reference')
+                }}
+                className="text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            
+            {/* Image preview */}
+            {state.reference.image && (
+              <img 
+                src={state.reference.image} 
+                alt="Reference screenshot" 
+                className="max-w-full max-h-32 rounded border border-blue-700/30"
+              />
+            )}
+            
+            {/* Audio preview */}
+            {state.reference.audio && (
+              <audio 
+                src={state.reference.audio} 
+                controls 
+                className="w-full h-8"
+                style={{ maxWidth: '300px' }}
+              />
+            )}
+            
+            {/* Explanation */}
+            {state.reference.explanation && (
+              <div className="text-gray-500 text-xs italic border-t border-blue-700/20 pt-2">
+                {state.reference.explanation.substring(0, 100)}{state.reference.explanation.length > 100 ? '...' : ''}
+              </div>
+            )}
+          </div>
+        )}
+        
+        <style>{`
+          @keyframes slideInScale {
+            0% {
+              opacity: 0;
+              transform: translateY(-10px) scale(0.95);
+            }
+            100% {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+          }
+          
+          @keyframes spin {
+            0% {
+              transform: rotate(0deg) scale(1);
+            }
+            50% {
+              transform: rotate(180deg) scale(1.2);
+            }
+            100% {
+              transform: rotate(360deg) scale(1);
+            }
+          }
+        `}</style>
+        
         <input
           ref={inputRef}
           type="text"

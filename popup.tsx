@@ -6,6 +6,7 @@ import { TTSProvider } from "./lib/tts-context"
 import { OnboardingProvider } from "./components/onboarding/onboarding-provider"
 import { DebugScreen } from "./screens/debug-screen"
 import { MainScreen } from "./screens/main-screen"
+import { SettingsScreen } from "./screens/settings-screen"
 import { DEFAULT_SCREEN, type Screen } from "./lib/config"
 import "./style.css"
 
@@ -19,7 +20,12 @@ const Popup = () => {
           <TTSProvider>
             <ChatProvider>
               {currentScreen === 'main' ? (
-                <MainScreen onNavigateToDebug={() => setCurrentScreen('debug')} />
+                <MainScreen 
+                  onNavigateToDebug={() => setCurrentScreen('debug')}
+                  onNavigateToSettings={() => setCurrentScreen('settings')}
+                />
+              ) : currentScreen === 'settings' ? (
+                <SettingsScreen onBack={() => setCurrentScreen('main')} />
               ) : (
                 <DebugScreen onNavigateToMain={() => setCurrentScreen('main')} />
               )}

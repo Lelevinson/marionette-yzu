@@ -1,6 +1,46 @@
 export {}
 
+import { initCustomTextSelection, triggerScreenshotMode, triggerAudioCapture } from '~components/custom-text-selection'
+import { initCaptureOverlayButtons } from '~components/capture-overlay-buttons'
+import { loadSettings } from '~lib/settings'
+
 console.log('Marionette content script loaded')
+
+let globalShortcutsEnabled = true
+
+// Load settings and initialize features
+loadSettings().then(settings => {
+  console.log('[Content] Loaded settings:', settings)
+  
+  if (settings.textSelectionEnabled) {
+    initCustomTextSelection()
+  }
+  
+  if (settings.captureOverlayEnabled) {
+    initCaptureOverlayButtons(triggerScreenshotMode, triggerAudioCapture)
+  }
+  
+  globalShortcutsEnabled = settings.globalShortcutsEnabled
+})
+
+// Listen for keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (!globalShortcutsEnabled) return
+  
+  // Cmd/Ctrl + Shift + S for screenshot
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 's') {
+    e.preventDefault()
+    e.stopPropagation()
+    triggerScreenshotMode()
+  }
+  
+  // Cmd/Ctrl + Shift + A for audio capture
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
+    e.preventDefault()
+    e.stopPropagation()
+    triggerAudioCapture()
+  }
+})
 
 // Listen for audio capture requests from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -23,6 +63,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message })
       })
     return true // Indicates async response
+  }
+  
+  if (message.type === 'settings_updated') {
+    console.log('[Content] Settings updated, reloading page recommended')
+    // User needs to reload page for settings to take effect
+    sendResponse({ success: true })
+    return true
   }
 })
 

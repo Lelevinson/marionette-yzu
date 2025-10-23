@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { Brain, AlertCircle, CheckCircle, ArrowRight, ArrowLeft, Loader2, ExternalLink } from 'lucide-react'
 import { useOnboarding } from '../onboarding-provider'
-import { openAIFlagsPage, openWriterAPIFlagsPage, openSummarizationAPIFlagsPage, openTranslatorAPIFlagsPage, openChromeAIDocs } from '../../../lib/alert-context'
+import { openAIFlagsPage, openWriterAPIFlagsPage, openRewriterAPIFlagsPage, openSummarizationAPIFlagsPage, openTranslatorAPIFlagsPage, openChromeAIDocs } from '../../../lib/alert-context'
 
 type APIStatus = 'checking' | 'available' | 'unavailable' | 'after-download'
 
 interface APIAvailability {
   promptAPI: APIStatus
   writerAPI: APIStatus
+  rewriterAPI: APIStatus
   summarizationAPI: APIStatus
   translationAPI: APIStatus
 }
@@ -17,6 +18,7 @@ type ModelState = 'checking' | 'available' | 'partial' | 'unavailable' | 'downlo
 interface DownloadProgress {
   promptAPI: number
   writerAPI: number
+  rewriterAPI: number
   summarizationAPI: number
   translationAPI: number
   embeddingModel: number
@@ -28,6 +30,7 @@ export const ModelAvailabilityStep = () => {
   const [apiStatus, setApiStatus] = useState<APIAvailability>({
     promptAPI: 'checking',
     writerAPI: 'checking',
+    rewriterAPI: 'checking',
     summarizationAPI: 'checking',
     translationAPI: 'checking'
   })
@@ -35,6 +38,7 @@ export const ModelAvailabilityStep = () => {
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>({
     promptAPI: 0,
     writerAPI: 0,
+    rewriterAPI: 0,
     summarizationAPI: 0,
     translationAPI: 0,
     embeddingModel: 0
@@ -57,11 +61,12 @@ export const ModelAvailabilityStep = () => {
     setErrorMessage('')
 
     console.log('[Onboarding] ===== Starting API Availability Check =====')
-    console.log('[Onboarding] Checking: window.LanguageModel, window.Writer, window.Summarizer, window.Translator')
+    console.log('[Onboarding] Checking: window.LanguageModel, window.Writer, window.Rewriter, window.Summarizer, window.Translator')
 
     const newStatus: APIAvailability = {
       promptAPI: 'checking',
       writerAPI: 'checking',
+      rewriterAPI: 'checking',
       summarizationAPI: 'checking',
       translationAPI: 'checking'
     }
@@ -126,6 +131,33 @@ export const ModelAvailabilityStep = () => {
         } catch (error) {
           console.error('[Onboarding] Writer API check failed:', error)
           newStatus.writerAPI = 'unavailable'
+        }
+      }
+
+      // Check Rewriter API (optional)
+      console.log('[Onboarding] Checking Rewriter API...')
+      console.log('[Onboarding] window.Rewriter exists:', 'Rewriter' in window)
+      
+      if (!('Rewriter' in window)) {
+        console.log('[Onboarding] Rewriter API NOT FOUND')
+        newStatus.rewriterAPI = 'unavailable'
+      } else {
+        try {
+          const availability = await (window as any).Rewriter.availability()
+          console.log('[Onboarding] Rewriter API availability:', availability)
+          
+          if (availability === 'no' || availability === 'unavailable') {
+            newStatus.rewriterAPI = 'unavailable'
+          } else if (availability === 'after-download') {
+            newStatus.rewriterAPI = 'after-download'
+          } else if (availability === 'readily' || availability === 'available') {
+            newStatus.rewriterAPI = 'available'
+          } else {
+            newStatus.rewriterAPI = 'unavailable'
+          }
+        } catch (error) {
+          console.error('[Onboarding] Rewriter API check failed:', error)
+          newStatus.rewriterAPI = 'unavailable'
         }
       }
 
@@ -199,6 +231,7 @@ export const ModelAvailabilityStep = () => {
         setModelAvailability(false)
       } else if (newStatus.promptAPI === 'after-download' || 
                  newStatus.writerAPI === 'after-download' || 
+                 newStatus.rewriterAPI === 'after-download' ||
                  newStatus.summarizationAPI === 'after-download' ||
                  newStatus.translationAPI === 'after-download') {
         console.log('[Onboarding] Starting model downloads...')
@@ -272,6 +305,32 @@ export const ModelAvailabilityStep = () => {
           console.log('[Onboarding] Writer API download complete')
         } catch (error) {
           console.error('[Onboarding] Writer API download failed:', error)
+          // Optional API, continue anyway
+        }
+      }
+
+      // Download Rewriter API (optional)
+      if (status.rewriterAPI === 'after-download') {
+        setCurrentlyDownloading('Rewriter API')
+        console.log('[Onboarding] Starting Rewriter API download')
+        
+        try {
+          const rewriter = await (window as any).Rewriter.create({
+            monitor(m: any) {
+              m.addEventListener('downloadprogress', (e: any) => {
+                const progress = Math.round(e.loaded * 100)
+                setDownloadProgress(prev => ({ ...prev, rewriterAPI: progress }))
+                console.log(`[Onboarding] Rewriter API downloading: ${progress}%`)
+              })
+            }
+          })
+          
+          updatedStatus.rewriterAPI = 'available'
+          setApiStatus(updatedStatus)
+          rewriter.destroy()
+          console.log('[Onboarding] Rewriter API download complete')
+        } catch (error) {
+          console.error('[Onboarding] Rewriter API download failed:', error)
           // Optional API, continue anyway
         }
       }
@@ -469,6 +528,26 @@ export const ModelAvailabilityStep = () => {
                 </div>
               )}
 
+              {/* Rewriter API Download */}
+              {(apiStatus.rewriterAPI === 'after-download' || downloadProgress.rewriterAPI > 0) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-300">Rewriter API</span>
+                    <span className={`${currentlyDownloading === 'Rewriter API' ? 'text-blue-400' : 'text-gray-500'}`}>
+                      {apiStatus.rewriterAPI === 'available' ? 'Complete' : `${downloadProgress.rewriterAPI}%`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${
+                        apiStatus.rewriterAPI === 'available' ? 'bg-green-500' : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${apiStatus.rewriterAPI === 'available' ? 100 : downloadProgress.rewriterAPI}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Summarization API Download */}
               {(apiStatus.summarizationAPI === 'after-download' || downloadProgress.summarizationAPI > 0) && (
                 <div className="space-y-2">
@@ -571,6 +650,23 @@ export const ModelAvailabilityStep = () => {
                 </div>
 
                 <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400">Rewriter API (Optional)</span>
+                  <span className={`flex items-center gap-1 ${
+                    apiStatus.rewriterAPI === 'available' ? 'text-green-400' : 
+                    apiStatus.rewriterAPI === 'after-download' ? 'text-yellow-400' :
+                    'text-gray-500'
+                  }`}>
+                    {apiStatus.rewriterAPI === 'available' ? (
+                      <><CheckCircle className="w-3 h-3" /> Available</>
+                    ) : apiStatus.rewriterAPI === 'after-download' ? (
+                      <><AlertCircle className="w-3 h-3" /> Needs Download</>
+                    ) : (
+                      <><AlertCircle className="w-3 h-3" /> Unavailable</>
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-400">Summarization API (Optional)</span>
                   <span className={`flex items-center gap-1 ${
                     apiStatus.summarizationAPI === 'available' ? 'text-green-400' : 
@@ -619,7 +715,7 @@ export const ModelAvailabilityStep = () => {
               </div>
 
               {/* Show enable buttons for unavailable optional APIs */}
-              {(apiStatus.writerAPI === 'unavailable' || apiStatus.summarizationAPI === 'unavailable' || apiStatus.translationAPI === 'unavailable') && (
+              {(apiStatus.writerAPI === 'unavailable' || apiStatus.rewriterAPI === 'unavailable' || apiStatus.summarizationAPI === 'unavailable' || apiStatus.translationAPI === 'unavailable') && (
                 <div className="pt-2 space-y-2">
                   <div className="text-[10px] text-gray-400">
                     Enable optional APIs for enhanced features:
@@ -638,6 +734,23 @@ export const ModelAvailabilityStep = () => {
                       </div>
                       <p className="text-[9px] text-gray-500">
                         Provides content generation and writing assistance
+                      </p>
+                    </div>
+                  )}
+
+                  {apiStatus.rewriterAPI === 'unavailable' && (
+                    <div className="bg-gray-800/50 rounded-lg p-2 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-gray-300 font-medium">Rewriter API</span>
+                        <button
+                          onClick={openRewriterAPIFlagsPage}
+                          className="px-2 py-1 bg-blue-900 hover:bg-blue-800 text-white rounded text-[10px] transition-colors"
+                        >
+                          Enable
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-gray-500">
+                        Provides text rewriting and editing assistance
                       </p>
                     </div>
                   )}

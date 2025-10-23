@@ -6,6 +6,7 @@ import { TTSProvider } from "./lib/tts-context"
 import { OnboardingProvider } from "./components/onboarding/onboarding-provider"
 import { DebugScreen } from "./screens/debug-screen"
 import { MainScreen } from "./screens/main-screen"
+import { SettingsScreen } from "./screens/settings-screen"
 import { DEFAULT_SCREEN, type Screen } from "./lib/config"
 import "./style.css"
 
@@ -18,6 +19,21 @@ const SidePanel = () => {
     document.body.style.margin = '0'
     document.body.style.overflow = 'hidden'
     document.documentElement.style.height = '100vh'
+    
+    // Listen for ping messages to detect if sidepanel is open
+    const handleMessage = (message: any, sender: any, sendResponse: (response?: any) => void) => {
+      if (message.type === 'ping_sidepanel') {
+        console.log('[Sidepanel] Responding to ping')
+        sendResponse({ alive: true })
+        return true
+      }
+    }
+    
+    chrome.runtime.onMessage.addListener(handleMessage)
+    
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleMessage)
+    }
   }, [])
 
   return (
@@ -28,7 +44,13 @@ const SidePanel = () => {
             <TTSProvider>
               <ChatProvider>
               {currentScreen === 'main' ? (
-                <MainScreen onNavigateToDebug={() => setCurrentScreen('debug')} fullHeight />
+                <MainScreen 
+                  onNavigateToDebug={() => setCurrentScreen('debug')} 
+                  onNavigateToSettings={() => setCurrentScreen('settings')}
+                  fullHeight 
+                />
+              ) : currentScreen === 'settings' ? (
+                <SettingsScreen onBack={() => setCurrentScreen('main')} />
               ) : (
                 <DebugScreen onNavigateToMain={() => setCurrentScreen('main')} fullHeight />
               )}

@@ -33,6 +33,12 @@ export const openWriterAPIFlagsPage = () => {
   chrome.tabs.create({ url })
 }
 
+// Helper to open Chrome flags for Rewriter API
+export const openRewriterAPIFlagsPage = () => {
+  const url = 'chrome://flags/#rewriter-api-for-gemini-nano'
+  chrome.tabs.create({ url })
+}
+
 // Helper to open Chrome flags for Translator API
 export const openTranslatorAPIFlagsPage = () => {
   const url = 'chrome://flags/#translation-api'

@@ -5,6 +5,7 @@ import { WelcomeStep } from './steps/welcome-step'
 import { PurposeStep } from './steps/purpose-step'
 import { MicPermissionStep } from './steps/mic-permission-step'
 import { ModelAvailabilityStep } from './steps/model-availability-step'
+import { FeaturesStep } from './steps/features-step'
 import { CompleteStep } from './steps/complete-step'
 
 export const OnboardingFlow = () => {
@@ -24,6 +25,8 @@ export const OnboardingFlow = () => {
         return <MicPermissionStep />
       case 'model':
         return <ModelAvailabilityStep />
+      case 'features':
+        return <FeaturesStep />
       case 'complete':
         return <CompleteStep />
       default:
@@ -32,11 +35,11 @@ export const OnboardingFlow = () => {
   }
 
   const getCurrentStepNumber = () => {
-    const steps = ['welcome', 'purpose', 'microphone', 'model', 'complete']
+    const steps = ['welcome', 'purpose', 'microphone', 'model', 'features', 'complete']
     return steps.indexOf(state.currentStep!) + 1
   }
 
-  const totalSteps = 5
+  const totalSteps = 6
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">

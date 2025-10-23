@@ -23,6 +23,14 @@ export const setGlobalAlertHandler = (handler: (type: 'error' | 'info', title: s
   globalAlertHandler = handler
 }
 
+interface ChatReference {
+  text: string
+  explanation: string
+  image?: string // base64 image data
+  audio?: string // base64 audio data
+  timestamp: number
+}
+
 interface ChatState {
   messages: Message[]
   isProcessing: boolean
@@ -31,6 +39,7 @@ interface ChatState {
   isWarmingUp: boolean
   executingTool: string | null
   isInToolLoop: boolean
+  reference: ChatReference | null
 }
 
 type ChatAction =
@@ -46,6 +55,7 @@ type ChatAction =
   | { type: 'SET_IN_TOOL_LOOP'; payload: boolean }
   | { type: 'APPLY_SUMMARY'; payload: { summaryMessage: Message } }
   | { type: 'MARK_MESSAGES_VISUAL_ONLY' }
+  | { type: 'SET_REFERENCE'; payload: ChatReference | null }
   | { type: 'RESET' }
 
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
@@ -103,6 +113,9 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
       console.log('[STOPBTN-REDUCER] SET_IN_TOOL_LOOP:', action.payload)
       return { ...state, isInToolLoop: action.payload }
     
+    case 'SET_REFERENCE':
+      return { ...state, reference: action.payload }
+    
     case 'MARK_MESSAGES_VISUAL_ONLY':
       // Mark all existing messages as visual only (keep in UI but exclude from AI context)
       return {
@@ -119,7 +132,7 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     
     case 'RESET':
       console.log('[STOPBTN-REDUCER] RESET - clearing all state')
-      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false, isWarmingUp: false, executingTool: null, isInToolLoop: false }
+      return { messages: [], isProcessing: false, isWaitingForFirstChunk: false, isSummarizing: false, isWarmingUp: false, executingTool: null, isInToolLoop: false, reference: null }
     
     default:
       return state
@@ -147,7 +160,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     isSummarizing: false,
     isWarmingUp: false,
     executingTool: null,
-    isInToolLoop: false
+    isInToolLoop: false,
+    reference: null
   })
 
   // Get TTS context to wait for readiness before tool execution and to queue system messages
@@ -174,9 +188,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     isInToolLoopRef.current = state.isInToolLoop
   }, [state.isProcessing, state.isInToolLoop])
 
-  // Restore messages on mount
+  // Restore messages and reference on mount
   React.useEffect(() => {
-    chrome.storage.local.get(['chat_messages'], (result) => {
+    chrome.storage.local.get(['chat_messages', 'chat_reference'], (result) => {
       if (result.chat_messages && Array.isArray(result.chat_messages) && result.chat_messages.length > 0) {
         console.log('Restored', result.chat_messages.length, 'messages from storage')
         result.chat_messages.forEach((msg: Message) => {
@@ -185,6 +199,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         // Mark that we need to rebuild context on next user message
         setNeedsContextRebuild(true)
       }
+      
+      // Load any existing reference
+      if (result.chat_reference) {
+        console.log('[REFERENCE] Restored reference from storage:', result.chat_reference)
+        dispatch({ type: 'SET_REFERENCE', payload: result.chat_reference })
+      }
+      
       // Mark initial load as complete (whether we restored messages or not)
       setIsInitialLoadComplete(true)
     })
@@ -192,6 +213,19 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     // Listen for storage changes from other instances
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
       if (areaName !== 'local') return
+      
+      // Handle reference changes
+      if (changes.chat_reference) {
+        const newReference = changes.chat_reference.newValue
+        if (newReference) {
+          console.log('[REFERENCE] Received new reference from content script:', newReference)
+          dispatch({ type: 'SET_REFERENCE', payload: newReference })
+        } else {
+          console.log('[REFERENCE] Reference cleared from storage')
+          dispatch({ type: 'SET_REFERENCE', payload: null })
+        }
+      }
+      
       if (!changes.chat_messages) return
       if (isSyncingRef.current) return
 
@@ -335,8 +369,34 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       soundEffects.play('thinking')
     })
     
-    // If we restored messages and haven't rebuilt context yet, prepend conversation history BEFORE adding new message
+    // Append reference if it exists
     let messageToSend = userInput
+    let referenceImage: string | undefined
+    let referenceAudio: string | undefined
+    const hadReference = state.reference // Save for UI display
+    if (state.reference) {
+      console.log('[REFERENCE] Appending reference to message:', state.reference)
+      
+      if (state.reference.image) {
+        // If reference has an image, we'll send it separately
+        referenceImage = state.reference.image
+        messageToSend = `${userInput}\n\n[REFERENCE IMAGE]\nExplanation: ${state.reference.explanation}`
+      } else if (state.reference.audio) {
+        // If reference has audio, we'll send it separately
+        referenceAudio = state.reference.audio
+        messageToSend = `${userInput}\n\n[REFERENCE AUDIO]\nExplanation: ${state.reference.explanation}`
+      } else {
+        messageToSend = `${userInput}\n\n[REFERENCE]\nSelected text: "${state.reference.text}"\nExplanation: ${state.reference.explanation}`
+      }
+      
+      console.log('[REFERENCE] Message with reference:', messageToSend)
+      
+      // Clear the reference from state and storage
+      dispatch({ type: 'SET_REFERENCE', payload: null })
+      chrome.storage.local.remove('chat_reference')
+    }
+    
+    // If we restored messages and haven't rebuilt context yet, prepend conversation history BEFORE adding new message
     if (needsContextRebuild && state.messages.length > 0) {
       // Only include non-visual messages in AI context
       const messagesForAI = state.messages.filter(msg => !msg.visualOnly)
@@ -369,12 +429,16 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         
         return `${msg.role.toUpperCase()}: ${content}`
       }).join('\n\n')
-      messageToSend = `[Previous conversation history]\n\n${history}\n\n[Current message]\nUSER: ${userInput}`
+      messageToSend = `[Previous conversation history]\n\n${history}\n\n[Current message]\nUSER: ${messageToSend}`
       setNeedsContextRebuild(false)
     }
     
     // Add user message AFTER building history
-    const userMessage = createUserMessage(userInput)
+    // If reference was appended, show it in the UI message too
+    const displayMessage = hadReference 
+      ? `${userInput}\n\n📎 Reference: "${hadReference.text.substring(0, 100)}${hadReference.text.length > 100 ? '...' : ''}"`
+      : userInput
+    const userMessage = createUserMessage(displayMessage)
     dispatch({ type: 'ADD_MESSAGE', payload: userMessage })
     
     // Check if this triggers a UI test case
@@ -418,7 +482,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
               // Update existing message
               dispatch({ type: 'UPDATE_MESSAGE', payload: { id: assistantMessageId, content: assistantContent } })
             }
-          }
+          },
+          referenceImage || referenceAudio // Pass image or audio as tool result if present
         )
       }
       
@@ -823,7 +888,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     destroyAISession()
     dispatch({ type: 'RESET' })
     // Clear storage
-    chrome.storage.local.remove(['chat_messages'])
+    chrome.storage.local.remove(['chat_messages', 'chat_reference'])
   }
 
   const interruptChat = () => {
