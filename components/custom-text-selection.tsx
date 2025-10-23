@@ -40,6 +40,7 @@ const CustomTextSelection = () => {
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([])
   const [referenceHighlightRects, setReferenceHighlightRects] = useState<HighlightRect[]>([]) // Orange highlights for references
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
+  const [showBelow, setShowBelow] = useState(false) // Whether to show tooltip below target
   const [inputValue, setInputValue] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -66,6 +67,23 @@ const CustomTextSelection = () => {
   const rewriter = useTextRewriter()
   const explainer = useTextExplainer()
   const writer = useTextWriter()
+
+  // Helper function to calculate if tooltip should be shown below
+  const calculateShowBelow = (targetY: number, isScreenshotOrAudio: boolean = false) => {
+    // Estimate tooltip height based on mode
+    // Regular tooltip with options: ~250px
+    // With explanation/suggestion: up to ~400px
+    // Screenshot/audio: centered, so different logic
+    const estimatedHeight = isScreenshotOrAudio ? 300 : 250
+    
+    // Check if showing above would put tooltip off-screen
+    // targetY is relative to document, so we need to compare with viewport
+    const viewportTop = window.scrollY
+    const spaceAbove = targetY - viewportTop
+    
+    // If there's not enough space above (with 20px padding), show below
+    return spaceAbove < estimatedHeight + 20
+  }
 
   // Load settings to check if write command is enabled
   useEffect(() => {
@@ -115,10 +133,15 @@ const CustomTextSelection = () => {
           
           // Position the writer overlay near the input
           const rect = target.getBoundingClientRect()
+          const shouldShowBelow = calculateShowBelow(rect.top + window.scrollY)
+          const targetY = shouldShowBelow 
+            ? rect.bottom + window.scrollY + 10  // Below: bottom + padding
+            : rect.top + window.scrollY - 10     // Above: top - padding
           setTooltipPosition({
             x: rect.left + rect.width / 2,
-            y: rect.top + window.scrollY - 10
+            y: targetY
           })
+          setShowBelow(shouldShowBelow)
           
           setInputValue('')
         }
@@ -204,10 +227,15 @@ const CustomTextSelection = () => {
               
               // Position the writer overlay near the element
               const rect = target.getBoundingClientRect()
+              const shouldShowBelow = calculateShowBelow(rect.top + window.scrollY)
+              const targetY = shouldShowBelow 
+                ? rect.bottom + window.scrollY + 10  // Below: bottom + padding
+                : rect.top + window.scrollY - 10     // Above: top - padding
               setTooltipPosition({
                 x: rect.left + rect.width / 2,
-                y: rect.top + window.scrollY - 10
+                y: targetY
               })
+              setShowBelow(shouldShowBelow)
               
               setInputValue('')
             }
@@ -250,10 +278,15 @@ const CustomTextSelection = () => {
         }]
         
         // Position tooltip above the input
+        const shouldShowBelow = calculateShowBelow(rect.top + window.scrollY)
+        const targetY = shouldShowBelow 
+          ? rect.bottom + window.scrollY + 10  // Below: bottom + padding
+          : rect.top + window.scrollY - 10     // Above: top - padding
         setTooltipPosition({
           x: rect.left + rect.width / 2,
-          y: rect.top + window.scrollY - 10
+          y: targetY
         })
+        setShowBelow(shouldShowBelow)
         
         // Store selection data with target element info
         setSelectionData({
@@ -303,10 +336,15 @@ const CustomTextSelection = () => {
         }
         
         const firstRect = rects[0]
+        const shouldShowBelow = calculateShowBelow(firstRect.top + window.scrollY)
+        const targetY = shouldShowBelow 
+          ? firstRect.bottom + window.scrollY + 10  // Below: bottom + padding
+          : firstRect.top + window.scrollY - 10     // Above: top - padding
         setTooltipPosition({
           x: firstRect.left + firstRect.width / 2,
-          y: firstRect.top + window.scrollY - 10
+          y: targetY
         })
+        setShowBelow(shouldShowBelow)
         
         setSelectionData({
           text: selectedText,
@@ -362,10 +400,15 @@ const CustomTextSelection = () => {
       
       // Position tooltip above the first rect
       const firstRect = rects[0]
+      const shouldShowBelow = calculateShowBelow(firstRect.top + window.scrollY)
+      const targetY = shouldShowBelow 
+        ? firstRect.bottom + window.scrollY + 10  // Below: bottom + padding
+        : firstRect.top + window.scrollY - 10     // Above: top - padding
       setTooltipPosition({
         x: firstRect.left + firstRect.width / 2,
-        y: firstRect.top + window.scrollY - 10
+        y: targetY
       })
+      setShowBelow(shouldShowBelow)
       
       // Store selection data for static text
       const data: SelectionData = {
@@ -400,6 +443,7 @@ const CustomTextSelection = () => {
       setSelectionData(null)
       setHighlightRects([])
       setTooltipPosition(null)
+      setShowBelow(false)
       setInputValue('')
       rewriter.reset()
       explainer.reset()
@@ -628,10 +672,13 @@ const CustomTextSelection = () => {
         })
         
         // Position tooltip centered in the current viewport
+        const targetY = window.innerHeight / 2 + window.scrollY
         setTooltipPosition({
           x: window.innerWidth / 2 + window.scrollX,
-          y: window.innerHeight / 2 + window.scrollY
+          y: targetY
         })
+        // Screenshots are centered, so use centered positioning
+        setShowBelow(false)
         
         setExplainerMode('options')
       }
@@ -709,10 +756,13 @@ const CustomTextSelection = () => {
         })
         
         // Position tooltip centered in the current viewport
+        const targetY = window.innerHeight / 2 + window.scrollY
         setTooltipPosition({
           x: window.innerWidth / 2 + window.scrollX,
-          y: window.innerHeight / 2 + window.scrollY
+          y: targetY
         })
+        // Audio is centered, so use centered positioning
+        setShowBelow(false)
         
         setExplainerMode('options')
       } else {
@@ -779,6 +829,7 @@ const CustomTextSelection = () => {
     setSelectionData(null)
     setHighlightRects([])
     setTooltipPosition(null)
+    setShowBelow(false)
     setInputValue('')
     setExplainerMode('options')
     setIsWriterMode(false)
@@ -884,6 +935,7 @@ const CustomTextSelection = () => {
     setSelectionData(null)
     setHighlightRects([])
     setTooltipPosition(null)
+    setShowBelow(false)
     
     // Auto-clear reference highlight after 3 seconds
     setTimeout(() => {
@@ -1042,7 +1094,7 @@ const CustomTextSelection = () => {
             position: 'absolute',
             left: `${tooltipPosition.x}px`,
             top: `${tooltipPosition.y}px`,
-            transform: 'translate(-50%, -100%)',
+            transform: showBelow ? 'translate(-50%, 0%)' : 'translate(-50%, -100%)',
             zIndex: 2147483647,
             pointerEvents: 'auto',
             cursor: isDragging ? 'grabbing' : 'auto'
@@ -1092,7 +1144,7 @@ const CustomTextSelection = () => {
           top: `${tooltipPosition.y}px`,
           transform: selectionData.screenshot || selectionData.audio 
             ? 'translate(-50%, -50%)' 
-            : 'translate(-50%, -100%)',
+            : (showBelow ? 'translate(-50%, 0%)' : 'translate(-50%, -100%)'),
           zIndex: 2147483647,
           pointerEvents: 'auto',
           cursor: isDragging ? 'grabbing' : 'auto'

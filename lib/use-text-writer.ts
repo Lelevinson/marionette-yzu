@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getPageContext } from './use-page-context'
 
 interface WriterTargetData {
   element: HTMLInputElement | HTMLTextAreaElement
@@ -27,9 +28,12 @@ export const useTextWriter = () => {
         throw new Error('Writer model unavailable')
       }
 
-      // Create writer
+      // Get page context
+      const pageContext = await getPageContext()
+
+      // Create writer with rich context
       const writer = await (self as any).Writer.create({
-        sharedContext: 'You are a helpful writing assistant. Generate clear, concise, and well-written content.'
+        sharedContext: `${pageContext}You are a helpful writing assistant. Generate clear, concise, and well-written content.`
       })
 
       // Stream the generation

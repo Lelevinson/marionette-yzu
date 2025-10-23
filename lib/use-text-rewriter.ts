@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { getPageContext } from './use-page-context'
 
 interface SelectionData {
   text: string
@@ -50,12 +51,15 @@ export const useTextRewriter = () => {
         length = 'longer'
       }
 
-      // Create rewriter with parsed options
+      // Get page context
+      const pageContext = await getPageContext()
+
+      // Create rewriter with parsed options and rich context
       const rewriter = await (self as any).Rewriter.create({
         tone,
         format: 'plain-text',
         length,
-        sharedContext: instruction
+        sharedContext: `${pageContext}${instruction}`
       })
 
       // Stream the rewrite

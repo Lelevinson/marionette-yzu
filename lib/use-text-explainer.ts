@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { getPageContext } from './use-page-context'
 
 export const useTextExplainer = () => {
   const [isProcessing, setIsProcessing] = useState(false)
@@ -19,11 +20,14 @@ export const useTextExplainer = () => {
         throw new Error('AI model unavailable')
       }
 
-      // Create a unified session for text, image, and audio explanations
+      // Get page context
+      const pageContext = await getPageContext()
+
+      // Create a unified session for text, image, and audio explanations with rich context
       explainerSessionRef.current = await (window as any).LanguageModel.create({
         initialPrompts: [{
           role: 'system',
-          content: 'You are a helpful assistant that provides clear and concise explanations. For text, explain the meaning, context, or significance in 2-3 sentences. For images, describe what you see and provide useful context or analysis in 2-3 sentences. For audio, describe what you hear and provide relevant context or analysis in 2-3 sentences.'
+          content: `${pageContext}You are a helpful assistant that provides clear and concise explanations. For text, explain the meaning, context, or significance in 2-3 sentences. For images, describe what you see and provide useful context or analysis in 2-3 sentences. For audio, describe what you hear and provide relevant context or analysis in 2-3 sentences.`
         }],
         expectedInputs: [{ type: 'text' }, { type: 'image' }, { type: 'audio' }]
       })
