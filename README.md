@@ -163,7 +163,7 @@ The onboarding actively guides you through flag setup with clickable buttons tha
 We built Marionette to run a capable AI agent entirely on-device, which meant working around some tight constraints while keeping things snappy and reliable.
 
 <div align="center">
-<img src="./diagrams/Marionette%20Diagram.png" alt="System Architecture" height="500" />
+<img src="./diagrams/Marionette Diagram.png" alt="System Architecture" height="500" />
 </div>
 
 ### The Constraints
