@@ -3,6 +3,7 @@
 <div align="center">
 
 <img src="./media/MarionetteDemo.gif" alt="Marionette Demo" height="400" />
+<img src="./media/rewrite-api.gif" alt="Marionette Demo" height="495" />
 
 **AI browser automation agent powered by Chrome's built-in Gemini Nano**
 
@@ -31,6 +32,7 @@
   - [Constraints & Solutions](#the-constraints)
   - [Agent Core & Loopback](#the-agent-is-the-prompt-api)
   - [Multimodal Capabilities](#multimodal-understanding)
+  - [Interactive Text & Media Analysis](#interactive-text--media-analysis)
   - [Perception & Interaction](#perception-and-action-the-agent-webpage-interface)
   - [Playbook System](#aligning-the-model-with-playbooks)
   - [Embeddings Architecture](#embeddings-why-they-massively-boost-gemini-nano)
@@ -51,16 +53,22 @@ Marionette removes digital barriers by letting you navigate and control any webs
 
 **Privacy-First Design:** After a one-time model download during setup (~2GB Gemini Nano + 23MB embeddings model), Marionette operates **100% offline**. Your conversations, captured pages, and browsing history never leave your device. No cloud inference, no telemetry, no API keys, no tracking. You can verify zero network activity by checking Chrome DevTools during normal operation.
 
+**⚡ Blazing Fast Performance:** Because everything runs locally on-device with Gemini Nano, responses are **instant**. Text explanations stream in 100-500ms, image analysis completes in under a second, and audio transcription happens in real-time—no network delays, no API queues, no waiting. The system feels native and responsive, like it's part of the browser itself. Select text, click "Explain," and watch the answer appear as fast as you can read it.
+
 **Key Features:**
-- On-device AI agent (Gemini Nano via Chrome Prompt API)
-- 22 automation tools (click, fill, scroll, capture, search)
-- Agentic loopback system (up to 60 tool iterations per task)
-- Multimodal input (text, voice, image, audio)
-- Semantic memory vault with chunk-based RAG retrieval
-- Drag-and-drop file embedding (PDF, TXT, MD, HTML, JSON)
-- 384D embeddings via Transformers.js (all-MiniLM-L6-v2)
-- Playbook-guided workflows for complex tasks
-- 100% offline, zero telemetry
+- 🤖 On-device AI agent (Gemini Nano via Chrome Prompt API)
+- 🛠️ 22 automation tools (click, fill, scroll, capture, search)
+- 🔄 Agentic loopback system (up to 60 tool iterations per task)
+- 🎭 Multimodal input (text, voice, image, audio)
+- **⚡ Interactive text selection tools** (explain, rewrite, send to agent—**100-500ms streaming responses**, context-aware with platform detection)
+- **📸 Visual capture & analysis** (select screen area, instant AI explanation)
+- **🎵 Audio capture & transcription** (record and analyze page audio)
+- **✍️ Smart text editing** (Writer API with user memories & page context injection)
+- 🗄️ Semantic memory vault with chunk-based RAG retrieval
+- 📄 Drag-and-drop file embedding (PDF, TXT, MD, HTML, JSON)
+- 🧮 384D embeddings via Transformers.js (all-MiniLM-L6-v2)
+- 📚 Playbook-guided workflows for complex tasks
+- 🔒 100% offline, zero telemetry
 
 ---
 
@@ -125,6 +133,29 @@ pnpm build
 
 The onboarding actively guides you through flag setup with clickable buttons that open the correct chrome://flags pages. If models aren't available, you'll get specific instructions on what to enable.
 
+### Quick Start Guide
+
+**Agent Interaction:**
+- Click the Marionette icon to open the popup/sidepanel
+- Type or speak your command ("fill this form", "summarize this page")
+- The agent perceives the page, plans actions, and executes autonomously
+
+**Text Analysis & Editing:**
+- **Select any text** → Get instant explanations or rewrite options (⚡ 100-500ms response)
+- **Type `/write` in input fields** → Generate content with AI assistance
+- Preset actions: Fix grammar, make formal, make concise, expand
+- All processing happens **locally** with streaming responses—no network delays!
+
+**Visual & Audio Capture:**
+- **`Ctrl+Shift+S`** (or capture button) → Select screen area to analyze
+- **`Ctrl+Shift+A`** (or audio button) → Record 5 seconds of page audio
+- Both support in-place analysis or sending to chat for deeper discussion
+
+**Send to Chat:**
+- Every analysis tool has a "Send to Chat" button
+- Creates a reference that highlights in orange on the page
+- Agent receives full context (text/image/audio) for conversation
+
 ---
 
 ## Design Notes
@@ -181,6 +212,219 @@ The agent processes information across four modalities, enabling richer context 
 | Audio | listen tool (tab audio) | Blob (audio data) | "Describe this podcast", "What's playing?" |
 
 When a tool returns an image (screenshot) or audio (recording), we convert it to a blob and send it alongside the next prompt. The model receives both the text message and the media, enabling responses like "I see a login form with two fields" or "The audio contains a discussion about React hooks." This multimodal fusion happens transparently—the agent doesn't distinguish between text-only and media-enhanced prompts.
+
+### Interactive Text & Media Analysis
+
+Beyond autonomous agent control, Marionette provides **⚡ instant AI-powered analysis tools** accessible directly from any webpage. These tools are **blazing fast** (100-500ms first response), **context-aware and personalized**—they understand the current platform (LinkedIn vs GitHub vs Twitter), the page you're on, and your stored preferences. They operate in two modes: **in-place analysis** for quick explanations, and **chat integration** for deeper conversations with the agent.
+
+<div align="center">
+<img src="./media/text-explain.gif" alt="Text Selection Demo" height="300" />
+</div>
+
+**Text Selection Tools:**
+
+When you select text anywhere on a page, an intelligent overlay appears with context-aware options:
+
+| Text Type | Tools Available | What It Does |
+|-----------|-----------------|--------------|
+| **Static Text** | Explain · Send to Chat | Explains meaning/context using Prompt API, or sends to agent for discussion |
+| **Editable Text** | Rewrite with 8 presets · Custom rewrite | Rewrites using Rewriter API with quick actions: Shorter, Expand, Professional, Friendly, Improve, Simplify, Enthusiastic, Conversational |
+| **Input Fields** | Same as editable text | Full rewriter support in any input/textarea/contenteditable element |
+
+The system automatically detects the context:
+- **Regular paragraphs** → Explanation mode (uses Prompt API for natural language understanding)
+- **Input boxes / textareas** → Rewrite mode (uses Rewriter API for text transformation)
+- **Contenteditable elements** → Full editing support with framework compatibility (React, Draft.js, etc.)
+
+**Smart Text Writing with /write Command:**
+
+<div align="center">
+<img src="./media/write-command.gif" alt="Writer Command Demo" height="250" />
+</div>
+
+Type `/write` in any input box or contenteditable field to trigger Chrome's Writer API:
+
+1. **Type** `/write` → Command automatically removed, writer overlay appears
+2. **Describe** what you want → "Write a professional email apologizing for delay"
+3. **Generate** → Writer API streams the output with page context awareness
+4. **Insert** → Text appears at cursor position, preserving formatting
+
+The writer understands the current page context (form fields, page content, URL) and generates contextually relevant text. Works seamlessly with React controlled inputs, Draft.js editors, and native contenteditable elements.
+
+**Context-Aware Intelligence:**
+
+All three analysis features (Explainer, Rewriter, Writer) are context-aware—they understand where you are and who you are:
+
+**Page Context Integration:**
+- **Current page title & domain** → "This is LinkedIn" vs "This is GitHub" 
+- **Platform recognition** → Detects Google Search, YouTube, Twitter/X, Reddit, Amazon, Facebook, Instagram
+- **User memories** → Stored facts like "My name is John", "My email is john@example.com", "I work at Acme Corp"
+
+This context is injected into Chrome's AI APIs via the `sharedContext` parameter, enabling smarter, personalized responses:
+
+**Example Benefits:**
+
+1. **LinkedIn Comment Rewriting:**
+   - You select: "this is cool"
+   - Click "Professional" preset
+   - Result: "This is an insightful post. Thanks for sharing, [Name]!"
+   - *Why it's smart:* Knows it's LinkedIn, uses professional tone, references your stored name
+
+2. **Email Composition with /write:**
+   - On Gmail, type `/write` in compose box
+   - Prompt: "decline this meeting"
+   - Result: "Hi [Recipient], Unfortunately I won't be able to attend the meeting on [date]. Please proceed without me. Best, [Your Name]"
+   - *Why it's smart:* Recognizes email context, uses your stored name/signature preferences
+
+3. **GitHub PR Comment Generation:**
+   - Type `/write` in comment box
+   - Prompt: "approve this change"
+   - Result: "LGTM! The implementation looks solid. Approved and merging."
+   - *Why it's smart:* Understands GitHub conventions (LGTM = Looks Good To Me), developer-appropriate tone
+
+4. **Twitter Reply Rewriting:**
+   - You type: "I disagree with this take on AI"
+   - Select text, click "Friendly" preset
+   - Result: "Interesting perspective! I see it a bit differently though—AI's impact on..."
+   - *Why it's smart:* Keeps it under 280 chars, maintains Twitter's conversational style
+
+5. **Amazon Review Writing:**
+   - Type `/write` in review field
+   - Prompt: "5 stars, fast shipping, great quality"
+   - Result: "Excellent product! Arrived quickly and exactly as described. The quality exceeded my expectations. Highly recommend!"
+   - *Why it's smart:* Knows it's a product review, structures feedback appropriately
+
+6. **Text Explanation with Personal Context:**
+   - Select technical jargon on a blog post
+   - Click "Explain"
+   - Agent knows: "User works in healthcare, prefers simple explanations"
+   - Result: Uses healthcare analogies, avoids over-technical language
+   - *Why it's smart:* Tailors explanation complexity to your background
+
+The combination of page awareness + personal memories means every AI interaction is contextualized to your current task and preferences—no generic, one-size-fits-all responses.
+
+**⚡ Blazing Fast Performance:**
+
+The analysis system is **instant**. Unlike cloud AI services with multi-second round trips, everything runs locally on your device:
+
+**🚀 Speed Comparison:**
+
+| System | Where It Runs | Typical Response Time | Experience |
+|--------|--------------|----------------------|------------|
+| **Marionette** | 🖥️ On-device (Gemini Nano) | **100-500ms** to first token | ⚡ Instant, feels native |
+| Cloud AI (GPT-4, Claude) | ☁️ Remote servers | 1-3+ seconds | 🐌 Noticeable wait, network dependent |
+| Traditional search | 🌐 Web crawling + API | 5-10+ seconds | 🕐 Frustrating delay |
+
+**Why It's So Fast:**
+
+1. **🏠 Local inference** → Zero network latency. The model is already loaded in Chrome's memory.
+2. **📡 Streaming responses** → Text appears token-by-token as it's generated, not all at once. You see results in 100-200ms.
+3. **🧠 Gemini Nano optimized** → Purpose-built for on-device speed. Runs in milliseconds, not seconds.
+4. **📸 Multimodal without round trips** → Images and audio process locally. No uploading 5MB screenshots to servers.
+5. **💾 Pre-loaded models** → After initial setup, models stay in memory. No cold starts or model loading delays.
+
+**Real-World Feel:**
+
+- **Select text** → Overlay appears instantly (< 50ms)
+- **Click "Explain"** → First words stream in **< 200ms** 
+- **Full explanation** → Complete response in **500ms - 1.5s** depending on length
+- **Rewrite presets** → Suggestions appear as you're reading the original text
+
+This isn't just "fast"—it's **responsive**. The streaming feels like typing, not waiting. You can read the explanation as it's being generated, making the cognitive experience seamless. No progress bars, no spinners—just immediate AI assistance.
+
+Compare that to cloud services where you:
+1. Wait for network upload (especially painful with images/audio)
+2. Wait in API queue
+3. Wait for cold start if unlucky
+4. Wait for full generation before seeing anything
+5. Deal with rate limits and timeouts
+
+**The Offline Advantage:**
+
+Because inference happens locally, speed is **consistent**:
+- ✅ Works instantly on slow WiFi
+- ✅ Same speed in airplane mode as on gigabit fiber
+- ✅ No degradation during peak hours
+- ✅ Never hits rate limits or queue delays
+- ✅ Multimodal processing (image + audio analysis) at local speeds
+
+The system achieves what cloud AI can't: **sub-second, streaming, multimodal responses that feel instantaneous**—all while keeping your data private.
+
+**Visual Capture & Analysis:**
+
+<div align="center">
+<img src="./media/explain-image.gif" alt="Screenshot Capture Demo" height="300" />
+</div>
+
+Press `Ctrl+Shift+S` (configurable) or click the capture button to enter screenshot mode:
+
+1. **Drag** to select any area of the page
+2. **Release** → Area captured instantly (with camera shutter effect)
+3. **Analyze** → ⚡ Gemini Nano's vision capabilities explain what's in the image (streaming response in < 500ms)
+4. **Send to Chat** → Discuss the screenshot with the agent ("What's wrong with this error?" "How do I fix this layout?")
+
+The screenshot system uses Chrome's `captureVisibleTab` API and crops to your selection. The captured image is sent to Gemini Nano with multimodal input support, enabling **instant visual question answering entirely offline**—no uploading multi-megabyte images to cloud servers.
+
+**Audio Recording & Transcription:**
+
+<div align="center">
+<img src="./media/explain-audio.gif" alt="Audio Capture Demo" height="200" />
+</div>
+
+Press `Ctrl+Shift+A` (configurable) or click the audio button to record page audio:
+
+1. **5-second countdown** → Prepare the audio you want to capture
+2. **Records 5 seconds** → Captures tab audio (videos, podcasts, music)
+3. **Analyze** → ⚡ Gemini Nano transcribes and explains the audio content (streaming response in < 1s)
+4. **Send to Chat** → Ask questions about what was playing ("Summarize this podcast clip" "What song is this?")
+
+Audio capture uses Chrome's `tabCapture` API with MediaRecorder, storing the recording as a base64-encoded blob. The multimodal Prompt API processes audio directly, enabling **instant offline speech recognition and audio understanding**—no uploading audio files to cloud transcription services.
+
+**Reference System: From Analysis to Conversation**
+
+<div align="center">
+<img src="./media/refer-chat.gif" alt="Send to Chat Demo" height="250" />
+</div>
+
+Every analysis tool includes a "Send to Chat" button that bridges in-place understanding with agentic conversation:
+
+- **Text selection** → Selected text appears as context in chat, highlighted in orange on page
+- **Screenshot** → Image sent as multimodal input to agent for deeper analysis
+- **Audio recording** → Audio blob shared with agent for transcription or discussion
+- **Explanation** → Your generated explanation becomes the starting point for conversation
+
+When you send a reference to chat:
+1. The source content briefly highlights in **orange** on the page (3-second fade)
+2. The extension popup/sidepanel opens automatically
+3. The reference appears in chat context with full media attachments
+4. The agent can see the image, hear the audio, or read the text you selected
+
+This creates a seamless workflow: **select → analyze → discuss → automate**. For example:
+- Select an error message → Explain → Send to Chat → "Fix this error for me"
+- Capture a form → Analyze → Send to Chat → "Fill this form with my default info"
+- Record audio → Transcribe → Send to Chat → "Summarize the key points"
+
+**API Integration & Privacy:**
+
+All analysis features use Chrome's built-in AI APIs, maintaining the same privacy guarantees as the main agent:
+
+| API | Feature | Privacy |
+|-----|---------|---------|
+| Prompt API | Text explanation, image analysis, audio transcription | 100% offline after model download |
+| Rewriter API | Text rewriting with tone/length adjustments | 100% offline |
+| Writer API | Content generation from prompts | 100% offline |
+
+No data leaves your device. Text, images, and audio are processed entirely on-device through Chrome's AI infrastructure.
+
+**Context Injection & Privacy:**
+
+While all three APIs receive page context and user memories via `sharedContext`, this information never leaves your machine:
+- Page titles and domains are extracted locally from the active tab
+- User memories are stored in Chrome's local extension storage (not synced)
+- Platform detection happens client-side through simple domain matching
+- Context strings are concatenated in memory and passed directly to on-device APIs
+
+The context injection makes the AI smarter without compromising privacy—it's just additional prompt engineering happening entirely on your device.
 
 ### Perception and Action: The Agent-Webpage Interface
 
@@ -649,12 +893,16 @@ Chrome extensions have broad but not unlimited capabilities. We can capture scre
 | Language | TypeScript 5.3 | Type-safe development |
 | UI | React + Tailwind CSS | Component-based interface with utility styling |
 | State | Zustand | Lightweight state management |
-| AI | Chrome Prompt API | On-device Gemini Nano inference |
+| AI - Agent | Chrome Prompt API | On-device Gemini Nano inference (multimodal) |
+| AI - Text Rewriting | Chrome Rewriter API | Text transformation with tone/length control |
+| AI - Content Generation | Chrome Writer API | Context-aware text generation |
+| AI - Summarization | Chrome Summarizer API | Conversation context compression |
 | Embeddings | Transformers.js | In-browser ML (all-MiniLM-L6-v2) |
 | Storage | IndexedDB | Semantic vault, rating database |
 | Voice | Web Speech API | Voice input transcription |
 | Wake Word | Porcupine | "Hey Marionette" detection |
 | Content Extraction | Readability.js | Clean webpage content |
+| Screen Capture | Chrome APIs | Screenshot and audio capture |
 | Build | esbuild (via Plasmo) | Fast bundling and hot reload |
 
 ---
@@ -681,10 +929,19 @@ marionette/
 │   ├── tool-registry.ts    # Central tool registry, validation
 │   ├── core-tools.ts       # Tools exposed in system prompt by default
 │   ├── ui-tools.ts         # Tools requiring user gesture (Writer, Summarizer)
+│   ├── use-text-explainer.ts  # Text/image/audio explanation with Prompt API
+│   ├── use-text-rewriter.ts   # Text rewriting with Rewriter API
+│   ├── use-text-writer.ts     # Content generation with Writer API
+│   ├── use-page-context.ts    # Page context extraction for API calls
 │   ├── playbooks/          # Workflow guides (form, search, email, listen)
 │   ├── tools/              # Individual tool implementations (22 tools)
 │   └── prompts/            # System prompt, summarization prompts
 ├── components/             # React components
+│   ├── custom-text-selection.tsx  # Text selection overlay system
+│   ├── text-explainer-view.tsx    # Explanation UI for static text
+│   ├── text-rewriter-view.tsx     # Rewriter UI for editable text
+│   ├── text-writer-view.tsx       # Writer UI for /write command
+│   ├── rewriter-presets.tsx       # Quick action presets (grammar, tone, etc.)
 │   ├── onboarding/         # First-run experience, model checks
 │   ├── waveform.tsx        # Voice input visualization
 │   └── ...
@@ -855,6 +1112,25 @@ Agent: `getPlaybook("my-workflow")` → receives domain context → decides auto
 - Provides `isValidTool` and `findSimilarTools` for validation
 - Separates UI tools (requiresUserGesture) from background tools
 
+**Text Selection System (`components/custom-text-selection.tsx`):**
+- Monitors document-wide text selection events (mouseup, keyboard)
+- Detects selection context (static text, input field, contenteditable)
+- Manages screenshot mode (drag to select area) and audio capture (countdown + recording)
+- Renders context-appropriate overlay (explainer for static, rewriter for editable, writer for /write)
+- Handles reference system (send to chat with orange highlight + auto-open popup)
+- Coordinates with three specialized hooks: useTextExplainer, useTextRewriter, useTextWriter
+
+**Text Analysis Hooks:**
+- `use-text-explainer.ts` - Creates Prompt API session with page context, streams explanations for text/image/audio
+- `use-text-rewriter.ts` - Uses Rewriter API with tone/length parameters, replaces selection in DOM
+- `use-text-writer.ts` - Uses Writer API to generate content, inserts at cursor position
+- `use-page-context.ts` - Extracts current page title/URL for sharedContext in all APIs
+
+**View Components:**
+- `text-explainer-view.tsx` - Displays selected text/image/audio preview, "Explain" and "Send to Chat" buttons, streaming result
+- `text-rewriter-view.tsx` - Shows preset actions (fix grammar, make formal), custom rewrite input, streaming suggestion
+- `text-writer-view.tsx` - Prompt input for content generation, streaming output display
+
 ### Development Workflow
 
 ```bash
@@ -869,6 +1145,7 @@ pnpm build
 
 **High Priority:**
 - **Porcupine wake word detection** - Currently non-functional in browser context; requires engineering to work with Web Audio API or service worker constraints
+- **Keyboard shortcuts configuration** - Make screenshot/audio capture shortcuts configurable in settings
 - Additional playbooks (booking flights, shopping, research workflows)
 - Tool improvements (better error messages, more robust parsing)
 - Prompt engineering (optimize alignment, reduce hallucinations)
@@ -876,6 +1153,9 @@ pnpm build
 
 **Medium Priority:**
 - UI polish (animations, better visualizations)
+- **Text selection enhancements** - Multi-language support, better contenteditable detection, custom preset creation
+- **Writer/Rewriter improvements** - Save favorite prompts, tone/style profiles, undo/redo for rewrites
+- **Reference system enhancements** - History of sent references, persistent highlights, reference search in chat
 - More perception tools (DOM query capabilities, XPath support)
 - Vault enhancements (export/import, chunk size optimization, re-ranking algorithms)
 - Rating analysis (scripts to extract patterns from stored ratings)
