@@ -138,12 +138,23 @@ async function findElements(params: { query: string }) {
       }
     }
     
+    // Detect if query is looking for an input/form field
+    const inputKeywords = ['search', 'input', 'field', 'box', 'text', 'type', 'enter', 'write', 'fill', 'form', 'textarea']
+    const queryLower = params.query.toLowerCase()
+    const isLookingForInput = inputKeywords.some(kw => queryLower.includes(kw))
+    
     // Generate embeddings for each element and calculate similarity
     const elementsWithSimilarity = await Promise.all(
       meaningfulElements.map(async (el: any) => {
         const elementText = `${el.role} ${el.name}`.trim()
         const embedding = await generateEmbedding(elementText)
-        const similarity = cosineSimilarity(queryEmbedding, embedding)
+        let similarity = cosineSimilarity(queryEmbedding, embedding)
+        
+        // Boost input elements when query suggests user wants a form field
+        if (isLookingForInput && (el.role === 'textbox' || el.role === 'combobox' || el.tagName === 'textarea')) {
+          similarity = Math.min(1.0, similarity + 0.3)
+        }
+        
         return { ...el, similarity }
       })
     )

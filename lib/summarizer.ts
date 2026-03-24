@@ -10,7 +10,7 @@ import {
 export { formatSummaryMessage }
 
 export const MAX_CONTEXT_SIZE = 9216
-const SUMMARIZATION_THRESHOLD = 0.8 // 80%
+const SUMMARIZATION_THRESHOLD = 0.92 // 92% - trigger later to avoid mid-conversation disruptions
 
 export function shouldSummarize(currentTokens: number): boolean {
   return currentTokens >= MAX_CONTEXT_SIZE * SUMMARIZATION_THRESHOLD

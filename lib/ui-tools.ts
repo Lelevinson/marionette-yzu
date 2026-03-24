@@ -271,7 +271,7 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
         targetLanguage
       })
       
-      if (availability === 'no') {
+      if (availability === 'unavailable') {
         throw new WriterAPIUnavailableError(`Translation from ${sourceLanguage} to ${targetLanguage} is not supported`)
       }
       
@@ -332,7 +332,7 @@ const TOOL_IMPLEMENTATIONS: Record<string, (params: any) => Promise<any>> = {
       // Check availability
       const availability = await (self as any).LanguageDetector.availability()
       
-      if (availability === 'no') {
+      if (availability === 'unavailable') {
         throw new WriterAPIUnavailableError('Language Detector model is not available')
       }
       

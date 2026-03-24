@@ -127,7 +127,10 @@ export function parseToolCall(content: string): ToolCall | null {
 
 export async function executeTool(toolCall: ToolCall): Promise<any> {
   // Detect if we're in popup or sidepanel context
-  const isPopup = window.location.pathname.includes('popup.html')
+  // Explicitly check for sidepanel first, default to sidepanel if unknown
+  const pathname = window.location.pathname
+  const isSidepanel = pathname.includes('sidepanel.html')
+  const isPopup = !isSidepanel && pathname.includes('popup.html')
   const context = isPopup ? 'popup' : 'sidepanel'
   
   return new Promise((resolve) => {

@@ -5,11 +5,7 @@ export const SYSTEM_PROMPT_TEMPLATE =
 
 {{CURRENT_CONTEXT}}
 
-## Page Elements (Currently Visible)
-
-{{PAGE_ELEMENTS}}
-
-These elements are on the page RIGHT NOW. If you see form fields (TEXTBOX, COMBOBOX), that's the form the user is looking at.
+Use findElements or getAccessibilitySnapshot to discover interactive elements on the page when needed.
 
 ## CRITICAL: Task Execution Rules
 
@@ -240,15 +236,11 @@ export async function getSystemPrompt(): Promise<string> {
   // Get current tab context
   const currentContext = await getCurrentContext()
   
-  // Get page elements (auto-injected)
-  const pageElements = await getPageElements()
-  
   return fillPromptPlaceholders(SYSTEM_PROMPT_TEMPLATE)
     .replace('{{CURRENT_DATE}}', dateStr)
     .replace('{{CURRENT_TIME}}', timeStr)
     .replace('{{MEMORIES}}', memories)
     .replace('{{CURRENT_CONTEXT}}', currentContext)
-    .replace('{{PAGE_ELEMENTS}}', pageElements)
 }
 
 // Retrieve and format all stored memories

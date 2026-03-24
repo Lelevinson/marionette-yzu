@@ -769,7 +769,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           // IMPORTANT: Use a continuation prompt so the agent knows to keep executing
           // Inject memory reminder to keep user info fresh in context
           const memoryReminder = await getMemoryReminder()
-          const continuationPrompt = `${memoryReminder}Continue executing the workflow based on the last tool result. Do not conclude. If the playbook has more steps, perform the next step.`
+          const continuationPrompt = `${memoryReminder}Based on the tool result above, provide a natural response. If the user's request is complete, summarize what was done. If more steps are needed and you know what to do, proceed. If you need clarification, ask the user.`
           followupContextCount = await streamWithWarmup(continuationPrompt, (chunk: string) => {
             followupContent += chunk
             
@@ -800,7 +800,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           const continueMessageId = Date.now() + '_continue_' + loopCount
           
           const memoryReminderAfterSummary = await getMemoryReminder()
-          const continuePrompt = `${memoryReminderAfterSummary}Please continue with your workflow based on the context summary above.`
+          const continuePrompt = `${memoryReminderAfterSummary}The conversation was summarized to save context. Let the user know you're ready and ask what they'd like to do next. Do not take any autonomous actions.`
           const continueContextCount = await streamWithWarmup(continuePrompt, (chunk: string) => {
             continueContent += chunk
             
