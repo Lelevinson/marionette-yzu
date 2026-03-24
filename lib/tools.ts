@@ -80,16 +80,48 @@ export function parseToolCall(content: string): ToolCall | null {
     processedContent = codeBlockMatch[1].trim()
   }
   
-  // Try correct format: <function_call>
+  // Try correct format: <function_call>...</function_call>
   if (processedContent.includes('<function_call>')) {
     console.log('[parseToolCall] Found <function_call> tag')
+    
+    // 1. Try correct closing tag first
     const match = processedContent.match(/<function_call>(.*?)<\/function_call>/s)
     if (match) {
       console.log('[parseToolCall] Regex matched successfully')
       return processAndParseJSON(match[1])
-    } else {
-      console.warn('[parseToolCall] Found <function_call> but regex did not match')
     }
+    
+    // 2. Try $$ as closing tag (common Gemini Nano malformation)
+    const dollarMatch = processedContent.match(/<function_call>(.*?)\$\$/s)
+    if (dollarMatch) {
+      console.log('[parseToolCall] Matched with $$ closing tag (malformed)')
+      return processAndParseJSON(dollarMatch[1])
+    }
+    
+    // 3. Fallback: extract everything after <function_call> and find JSON by brace matching
+    const afterTag = processedContent.split('<function_call>').pop()?.trim()
+    if (afterTag && afterTag.startsWith('{')) {
+      console.log('[parseToolCall] Attempting brace-matching extraction after <function_call>')
+      let braceDepth = 0
+      let jsonEnd = -1
+      for (let i = 0; i < afterTag.length; i++) {
+        if (afterTag[i] === '{') braceDepth++
+        else if (afterTag[i] === '}') {
+          braceDepth--
+          if (braceDepth === 0) {
+            jsonEnd = i + 1
+            break
+          }
+        }
+      }
+      if (jsonEnd > 0) {
+        const extracted = afterTag.substring(0, jsonEnd)
+        console.log('[parseToolCall] Extracted JSON via brace matching:', extracted)
+        return processAndParseJSON(extracted)
+      }
+    }
+    
+    console.warn('[parseToolCall] Found <function_call> but could not extract JSON')
   }
   
   // Try malformed format with backticks: ```tool_call> or ```function_call>

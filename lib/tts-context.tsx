@@ -152,15 +152,40 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     
     // Clean text for TTS - remove markdown and special characters that shouldn't be spoken
     const cleanedSentence = sentence
-      .replace(/`/g, '') // Remove backticks
-      .replace(/\*\*/g, '') // Remove bold markers
-      .replace(/\*/g, '') // Remove italic markers/bullets
-      .replace(/_/g, '') // Remove underscores
-      .replace(/~/g, '') // Remove strikethrough
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Convert [text](url) to just text
-      .replace(/#{1,6}\s/g, '') // Remove markdown headers
-      .replace(/```[^`]*```/g, '') // Remove code blocks
-      .replace(/`([^`]+)`/g, '$1') // Convert inline code to plain text
+      // Remove code blocks first
+      .replace(/```[^`]*```/gs, '')
+      // Convert inline code to plain text
+      .replace(/`([^`]+)`/g, '$1')
+      // Remove remaining backticks
+      .replace(/`/g, '')
+      // Remove bold markers
+      .replace(/\*\*/g, '')
+      // Remove bullet point markers at line start (*, -, •)
+      .replace(/^\s*[\*\-•]\s+/gm, '')
+      // Remove numbered list markers (1. 2. etc.)
+      .replace(/^\s*\d+\.\s+/gm, '')
+      // Remove italic markers (single *)
+      .replace(/\*/g, '')
+      // Remove underscores used for emphasis
+      .replace(/_/g, ' ')
+      // Remove strikethrough
+      .replace(/~/g, '')
+      // Convert [text](url) to just text
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      // Remove markdown headers
+      .replace(/#{1,6}\s/g, '')
+      // Remove arrow characters
+      .replace(/[→←↑↓]/g, '')
+      // Remove "e.g." and "i.e." patterns that sound weird
+      .replace(/\be\.g\.\s*/gi, 'for example ')
+      .replace(/\bi\.e\.\s*/gi, 'that is ')
+      // Clean up orphaned parentheses with only whitespace
+      .replace(/\(\s*\)/g, '')
+      // Collapse multiple spaces
+      .replace(/\s{2,}/g, ' ')
+      // Remove leading/trailing colons that result from stripped content
+      .replace(/^\s*:\s*/g, '')
+      .replace(/\s*:\s*$/g, '')
       .trim()
     
     setCurrentSentence(cleanedSentence)

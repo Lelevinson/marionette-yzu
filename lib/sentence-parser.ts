@@ -1,4 +1,29 @@
-// Original sentence parser - checks for complete sentences only
+// Strip markdown formatting from text before TTS sentence splitting
+function stripMarkdown(text: string): string {
+  return text
+    // Remove code blocks
+    .replace(/```[^`]*```/gs, '')
+    // Convert inline code to plain text
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/`/g, '')
+    // Remove bold/italic markers
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    // Remove bullet markers at start of lines
+    .replace(/^\s*[\-•]\s+/gm, '')
+    // Remove numbered list markers
+    .replace(/^\s*\d+\.\s+/gm, '')
+    // Remove markdown headers
+    .replace(/#{1,6}\s/g, '')
+    // Remove underscores used for emphasis
+    .replace(/_/g, ' ')
+    // Remove arrow characters
+    .replace(/[→←↑↓]/g, '')
+    // Collapse multiple spaces
+    .replace(/\s{2,}/g, ' ')
+}
+
+// Check if text ends with a complete sentence
 const isCompleteSentence = (s: string): boolean => {
   const t = s.trim()
   if (!t) return false
@@ -10,8 +35,11 @@ const isCompleteSentence = (s: string): boolean => {
 }
 
 export function splitIntoSentences(text: string): string[] {
+  // Pre-process: strip markdown formatting
+  const cleanText = stripMarkdown(text)
+  
   // Split by newlines first (preserves numbers like 258.93)
-  const lines = text.split(/\n+/).filter(line => line.trim().length > 0)
+  const lines = cleanText.split(/\n+/).filter(line => line.trim().length > 0)
   
   // If we have multiple lines, treat only complete lines as sentences
   if (lines.length > 1) {

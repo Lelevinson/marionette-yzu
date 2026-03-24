@@ -86,6 +86,7 @@ async function handleFillInput(selector: string, value: string): Promise<string>
     const isInput = element instanceof HTMLInputElement
     const isTextarea = element instanceof HTMLTextAreaElement
     const isContentEditable = element.getAttribute('contenteditable') === 'true' || 
+                              element.getAttribute('contenteditable') === '' ||
                               element.getAttribute('role') === 'textbox'
     
     if (!isInput && !isTextarea && !isContentEditable) {
@@ -98,19 +99,40 @@ async function handleFillInput(selector: string, value: string): Promise<string>
     element.focus()
     
     if (isContentEditable) {
-      // For contenteditable (Gmail, rich editors): click + focus + wait + execCommand
+      // For contenteditable (Gmail, rich editors, Notion, etc.)
       element.click()
       element.focus()
       
       setTimeout(() => {
         try {
-          const success = document.execCommand('insertText', false, value)
+          // Select all existing content first
+          const selection = window.getSelection()
+          const range = document.createRange()
+          range.selectNodeContents(element)
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+          
+          // Try execCommand first (still works in most browsers)
+          let success = false
+          try {
+            success = document.execCommand('insertText', false, value)
+          } catch {
+            success = false
+          }
           
           if (!success) {
-            // Fallback
+            // Fallback: use InputEvent with data (modern approach)
             element.textContent = value
-            element.dispatchEvent(new InputEvent('input', { bubbles: true }))
+            element.dispatchEvent(new InputEvent('input', {
+              bubbles: true,
+              composed: true,
+              inputType: 'insertText',
+              data: value,
+            }))
           }
+          
+          // Also dispatch change event
+          element.dispatchEvent(new Event('change', { bubbles: true }))
           
           const name = element.getAttribute('aria-label') || 'input field'
           resolve(`Filled "${name.substring(0, 50)}"`)
@@ -119,12 +141,36 @@ async function handleFillInput(selector: string, value: string): Promise<string>
         }
       }, 100)
     } else {
-      // For regular inputs/textareas: direct value assignment
+      // For regular inputs/textareas: use native setter trick for React/Vue/Angular compatibility
       try {
         const inputElement = element as HTMLInputElement | HTMLTextAreaElement
-        inputElement.value = value
-        inputElement.dispatchEvent(new Event('input', { bubbles: true }))
-        inputElement.dispatchEvent(new Event('change', { bubbles: true }))
+        
+        // Use the native prototype setter to bypass framework getters/setters
+        // This is the same technique used by Playwright and Puppeteer
+        const nativeInputSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value'
+        )?.set
+        const nativeTextareaSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value'
+        )?.set
+        
+        const setter = inputElement instanceof HTMLTextAreaElement
+          ? nativeTextareaSetter
+          : nativeInputSetter
+        
+        if (setter) {
+          setter.call(inputElement, value)
+        } else {
+          // Fallback to direct assignment
+          inputElement.value = value
+        }
+        
+        // Dispatch full event sequence for framework compatibility
+        inputElement.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
+        inputElement.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
+        // React 16+ listens for these custom events
+        inputElement.dispatchEvent(new Event('blur', { bubbles: true }))
+        inputElement.focus()
         
         const name = element.getAttribute('aria-label') || 
                      inputElement.labels?.[0]?.textContent?.trim() ||

@@ -25,7 +25,7 @@ async function fillInput(params: { index: number, value: string }) {
     const contentResponse = await new Promise<{ success: boolean; result?: string; error?: string }>((resolve) => {
       chrome.tabs.sendMessage(tab.id, {
         type: 'fill_input',
-        selector: `[data-marionette-${params.index}]`,
+        selector: `[data-marionette-id="${params.index}"]`,
         value: params.value
       }, (response) => {
         if (chrome.runtime.lastError) {
