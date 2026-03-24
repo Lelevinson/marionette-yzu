@@ -106,10 +106,10 @@ git clone https://github.com/yourusername/marionette.git
 cd marionette
 
 # Install dependencies
-pnpm install
+npm install
 
 # Build extension
-pnpm build
+npm run build
 
 # Load in Chrome
 # 1. Go to chrome://extensions
@@ -889,7 +889,7 @@ Chrome extensions have broad but not unlimited capabilities. We can capture scre
 | Category | Technology | Purpose |
 |----------|-----------|---------|
 | Framework | Plasmo | Chrome extension framework with React support |
-| Package Manager | pnpm | Fast, efficient dependency management |
+| Package Manager | npm | Standard JavaScript dependency management |
 | Language | TypeScript 5.3 | Type-safe development |
 | UI | React + Tailwind CSS | Component-based interface with utility styling |
 | State | Zustand | Lightweight state management |
@@ -1135,10 +1135,10 @@ Agent: `getPlaybook("my-workflow")` → receives domain context → decides auto
 
 ```bash
 # Start dev server with hot reload
-pnpm dev
+npm run dev
 
 # Build for production
-pnpm build
+npm run build
 ```
 
 ### Areas for Contribution
