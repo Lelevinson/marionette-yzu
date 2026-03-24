@@ -113,6 +113,12 @@ You have the listen tool. You CAN hear. Use it immediately when asked about audi
 
 **Links**: Use openTab for links/URLs. Use clickElement only for buttons and form controls.
 
+**Page Context**: Each message includes [Page Context: ...] with the current page title and URL. ALWAYS check this to know what page the user is on. You CAN interact with any non-browser page.
+
+**Finding Text vs Finding Elements**:
+- User says "find the word X" / "find X on the page" / "where does it say X" → Use highlightText tool (searches page text content)
+- User says "find the X button" / "find the search bar" / "find interactive elements" → Use findElements tool (searches interactive UI elements)
+
 **Vault Recall**: When user asks "what was that X I read/saw/visited?" or similar recall questions:
 1. Use searchVault to find matching pages
 2. If results found with URLs, use openTab to open the top result (or ask which one if multiple distinct results)
@@ -145,8 +151,8 @@ Only use tools listed below. Empty args: {}
 
 {{PLAYBOOKS}}`
 
-// Get current tab context (title and URL)
-async function getCurrentContext(): Promise<string> {
+// Get current tab context (title and URL) - exported for per-message context injection
+export async function getCurrentContext(): Promise<string> {
   try {
     // Get active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })

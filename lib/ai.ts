@@ -1,6 +1,6 @@
 // Simple AI module
 import { E2E_TEST_CONFIG } from "./e2e-config"
-import { getSystemPrompt } from "./prompts/system-prompt"
+import { getSystemPrompt, getCurrentContext } from "./prompts/system-prompt"
 import { TOOL_REGISTRY } from "./tool-registry"
 
 let aiSession: any = null
@@ -84,7 +84,17 @@ export async function streamResponse(
 
   currentController = new AbortController()
 
-  let promptInput: any = message
+  // Inject fresh page context into each message so the model always knows
+  // what page the user is on (the system prompt's context is frozen at session start)
+  let contextualMessage = message
+  try {
+    const pageContext = await getCurrentContext()
+    contextualMessage = `[Page Context: ${pageContext}]\n\n${message}`
+  } catch (err) {
+    console.warn('[AI] Failed to get page context for message:', err)
+  }
+
+  let promptInput: any = contextualMessage
 
   if (toolResult) {
     // Check if tool result is an image (data URL)

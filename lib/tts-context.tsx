@@ -374,22 +374,22 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
     
     const newSentences = splitIntoSentences(text)
     console.log('[TTS] Extracted sentences:', newSentences.length)
-    console.log('[TTS] Last spoken sentences:', lastSpokenSentencesRef.current.length)
+    console.log('[TTS] Previously spoken count:', lastSpokenSentencesRef.current.length)
     
-    // Find new sentences that haven't been spoken yet or queued
-    const unspokenSentences = newSentences.filter(
-      sentence => !lastSpokenSentencesRef.current.includes(sentence)
-    )
+    // Use count-based tracking: only queue sentences beyond what we've already spoken/queued
+    // This prevents re-speaking when streaming causes earlier sentences to grow
+    const alreadyProcessedCount = lastSpokenSentencesRef.current.length
+    const trulyNewSentences = newSentences.slice(alreadyProcessedCount)
     
-    console.log('[TTS] New unspoken sentences:', unspokenSentences.length)
+    console.log('[TTS] Truly new sentences (by count):', trulyNewSentences.length)
 
-    if (unspokenSentences.length > 0) {
+    if (trulyNewSentences.length > 0) {
       // Add new sentences to the queue
-      console.log('[TTS] Adding', unspokenSentences.length, 'sentences to queue')
-      sentenceQueueRef.current.push(...unspokenSentences)
+      console.log('[TTS] Adding', trulyNewSentences.length, 'sentences to queue')
+      sentenceQueueRef.current.push(...trulyNewSentences)
       setQueueLength(sentenceQueueRef.current.length)
       
-      // Update tracking
+      // Update tracking - store all sentences seen so far
       lastSpokenSentencesRef.current = newSentences
       
       // If not already processing, start the queue
@@ -400,7 +400,9 @@ export const TTSProvider = ({ children }: { children: ReactNode }) => {
         console.log('[TTS] Queue already processing, sentences added')
       }
     } else {
-      console.log('[TTS] No new sentences to add to queue')
+      // No new sentences yet - but the LAST sentence might still be growing
+      // Update tracking to reflect current state without re-queuing
+      console.log('[TTS] No new sentences to add to queue (text still streaming)')
     }
   }, [processNextInQueue])
 
